@@ -96,7 +96,8 @@ PolygonMesh real_shrink(PolygonMesh& pmesh, const double& shrink_factor, const N
     typedef K::Point_3 Point3;
     typedef CGAL::Surface_mesh<Point3> Surface_mesh;
 
-    Surface_mesh new_pmesh;
+    //Surface_mesh new_pmesh;
+    PolygonMesh new_pmesh;
 
     // create new_vpmap
     typedef typename GetVertexPointMap<PolygonMesh, NamedParameters>::type VertexPointMap;

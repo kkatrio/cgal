@@ -105,3 +105,6 @@ polyhedron_demo_plugin(detect_sharp_edges_sm_plugin Detect_sharp_edges_plugin)
 target_link_libraries(detect_sharp_edges_sm_plugin scene_surface_mesh_item)
 target_compile_definitions(detect_sharp_edges_sm_plugin PUBLIC "-DUSE_SURFACE_MESH" )
 
+qt5_wrap_ui( shrinkUI_FILES Shrink.ui)
+polyhedron_demo_plugin(shrink_plugin Shrink_plugin ${shrinkUI_FILES})
+target_link_libraries(shrink_plugin scene_polyhedron_item scene_polyhedron_selection_item)
