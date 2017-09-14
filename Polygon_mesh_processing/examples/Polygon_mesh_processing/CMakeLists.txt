@@ -104,7 +104,7 @@ create_single_source_cgal_program( "corefinement_mesh_union.cpp" )
 create_single_source_cgal_program( "corefinement_polyhedron_union.cpp" )
 create_single_source_cgal_program( "corefinement_LCC.cpp")
 create_single_source_cgal_program( "hole_filling_example_LCC.cpp" )
-create_single_source_cgal_program( "shrinking_example.cpp" )
+create_single_source_cgal_program( "shrink_example.cpp" )
 
 if(OpenMesh_FOUND)
 create_single_source_cgal_program( "compute_normals_example_OM.cpp" )

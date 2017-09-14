@@ -15,7 +15,7 @@ typedef CGAL::Surface_mesh<K::Point_3> Mesh;
 int main(int argc, char* argv[]){
 
 
-    const char* filename = "data/degenerate_polygon_extract.off";
+    const char* filename = "data/polygon.off";
     std::ifstream input(filename);
 
     Mesh mesh;
@@ -26,11 +26,11 @@ int main(int argc, char* argv[]){
 
 
 
-    CGAL::Polygon_mesh_processing::shrink(0.5, CGAL::Polygon_mesh_processing::parameters::all_default());
+    CGAL::Polygon_mesh_processing::real_shrink(mesh, 0.5, CGAL::Polygon_mesh_processing::parameters::all_default());
 
 
 
-    std::ofstream output("data/degenerate_polygon_extract_hrinked.off");
+    std::ofstream output("data/polygon_shrinked.off");
     output << mesh;
     output.close();
 
