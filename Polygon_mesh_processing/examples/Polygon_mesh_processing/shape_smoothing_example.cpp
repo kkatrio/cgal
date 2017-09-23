@@ -22,8 +22,8 @@ int main(int argc, char* argv[])
 
 
 
+  CGAL::Polygon_mesh_processing::smooth_shape(mesh);
 
-  CGAL::Polygon_mesh_processing::solve_linear_system();
 
 
   std::cout<<"done"<<std::endl;
