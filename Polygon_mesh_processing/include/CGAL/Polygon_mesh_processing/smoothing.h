@@ -11,6 +11,8 @@
 #include <CGAL/Eigen_matrix.h>
 #include <Eigen/Sparse>
 
+#include <fstream>
+
 namespace CGAL {
 
 namespace Polygon_mesh_processing {
@@ -57,18 +59,119 @@ struct Cotangent_weight : CotangentValue
 template<typename PolygonMesh, typename VertexPointMap>
 class Shape_smoother{
 
+// types
 private:
-
 
     typedef typename boost::graph_traits<PolygonMesh>::vertex_descriptor vertex_descriptor;
     typedef typename boost::graph_traits<PolygonMesh>::halfedge_descriptor halfedge_descriptor;
 
-    typedef CGAL::Eigen_solver_traits< Eigen::SimplicialLDLT< Eigen::SparseMatrix<double> > > Solver_traits;
+    typedef CGAL::Eigen_sparse_matrix<double>::EigenType EigenMatrix;
+   // typedef CGAL::Eigen_solver_traits< Eigen::SimplicialLDLT< EigenMatrix > > Solver_traits;
+     typedef CGAL::Eigen_solver_traits<> Solver_traits;
+
+    typedef typename Solver_traits::Matrix Matrix;
+    typedef typename Solver_traits::Vector Vector;
 
 
     // vertex index map
     typedef typename boost::property_map<PolygonMesh, boost::vertex_index_t>::type IndexMap;
-    IndexMap idxmap = get(boost::vertex_index, mesh_);
+
+    typedef typename GetGeomTraits<PolygonMesh>::type GeomTraits;
+
+    typedef typename GeomTraits::Point_3 Point;
+
+    typedef typename GeomTraits::FT NT;
+
+
+// data
+private:
+
+    IndexMap vimap = get(boost::vertex_index, mesh_);
+
+    // geometry data
+    PolygonMesh& mesh_;
+    VertexPointMap& vpmap_;
+    Cotangent_weight<PolygonMesh, VertexPointMap> weight_calculator_;
+
+    std::size_t nb_vert_;
+
+    // linear solver
+    Solver_traits solver_;
+
+
+// operations
+private:
+
+    void compute_coeff_matrix(Matrix& A)
+    {
+
+        for(vertex_descriptor vi : vertices(mesh_))
+        {
+            //if(!is_border(vi, mesh_))
+            //{
+                double sum_Lik = 0;
+                for(halfedge_descriptor h : halfedges_around_source(vi, mesh_))
+                {
+                    // calculate weight
+                    double Lij = weight_calculator_(h);
+                    sum_Lik -= Lij;
+
+                    vertex_descriptor vj = target(h, mesh_);
+
+                    A.add_coef(vimap[vi], vimap[vj], -Lij);
+                }
+
+                // diagonal
+                A.add_coef(vimap[vi], vimap[vi], 1.0 - sum_Lik);
+           // }
+        }
+
+
+       // A.assemble_matrix(); // remove with set
+    }
+
+
+    void compute_rhs(Vector& Bx, Vector& By, Vector& Bz)
+    {
+
+        for(vertex_descriptor vi : vertices(mesh_))
+        {
+            //if(!is_border(vi, mesh_)) // border ones do not move
+           // {
+                int index = vimap[vi];
+                Point p = get(vpmap_, vi);
+                Bx.set(index, p.x());
+                By.set(index, p.y());
+                Bz.set(index, p.z());
+          //  }
+
+        }
+
+
+    }
+
+
+/*
+    void extract_matrix(Matrix& A)
+    {
+
+
+        std::ofstream out("matA.dat");
+        for(int j=0; j < A.column_dimension(); ++j)
+        {
+            for(int i=0; i < A.row_dimension(); ++i)
+            {
+                NT val = A.
+                out<<val;
+            }
+            out<<endl;
+        }
+
+        out.close();
+    }
+*/
+
+
 
 
 
@@ -76,49 +179,42 @@ private:
 
 public:
 
+    Shape_smoother(PolygonMesh& mesh, VertexPointMap& vpmap) : mesh_(mesh), vpmap_(vpmap),
+        weight_calculator_(mesh, vpmap),
+        nb_vert_(static_cast<int>(vertices(mesh).size()))
+    { }
 
-    Shape_smoother(PolygonMesh& mesh, VertexPointMap& vpmap) : mesh_(mesh), vpmap_(vpmap), weight_calculator_(mesh, vpmap)
+
+    void solve_system()
     {
-        nb_vertices = vertices(mesh_).size();
-    }
+        Matrix A(nb_vert_, nb_vert_);
+        Vector Bx(nb_vert_);
+        Vector By(nb_vert_);
+        Vector Bz(nb_vert_);
+        Vector Xx(nb_vert_);
+        Vector Xy(nb_vert_);
+        Vector Xz(nb_vert_);
 
+        compute_coeff_matrix(A);
+        compute_rhs(Bx, By, Bz);
 
+        //extract_matrix(A);
 
-
-    void calculate_coeff_matrix()
-    {
-
-
-        // linear system data
-        typename Solver_traits::Matrix A(nb_vertices, nb_vertices);
-
-
-
-        for(vertex_descriptor vi : vertices(mesh_))
+        NT Dx, Dy, Dz;
+        if(!solver_.linear_solver(A, Bx, Xx, Dx) ||
+           !solver_.linear_solver(A, By, Xy, Dy) ||
+           !solver_.linear_solver(A, Bz, Xz, Dz) )
         {
-            if(!is_border(vi, mesh_))
-            {
-                double sum_L = 0;
-                for(halfedge_descriptor h : halfedges_around_source(v, mesh_))
-                {
-                    // calculate weight
-                    double Lij = weight_calculator_(h);
-                    sum_L += Lij;
-
-                    vertex_descriptor vj = target(h, mesh_);
-
-                    A.add_coef(idxmap[vi], idxmap[vj], Lij);
-                }
-
-                A.add_coef(idxmap[vi], idxmap[vi], sum_L);
-
-            }
-
-
+            std::cerr<<"Could not solve linear system!"<<std::endl;
         }
 
 
 
+
+
+        std::cout<<"Xx= "<<Xx<<std::endl;
+        std::cout<<"Xy= "<<Xy<<std::endl;
+        std::cout<<"Xz= "<<Xz<<std::endl;
     }
 
 
@@ -126,59 +222,6 @@ public:
 
 
 
-    void solve_linear_system()
-    {
-
-        typedef CGAL::Eigen_solver_traits<Eigen::SimplicialLDLT<Eigen::SparseMatrix<double>>> Eigen_solver;
-
-
-        std::size_t degree = 2;
-        std::size_t nb_nonzero_coef = 3;
-
-        Eigen_solver::Matrix A(degree);
-        Eigen_solver::Vector B(degree);
-
-
-        A.add_coef(0, 0, 2);
-        A.add_coef(1, 1, 3);
-        A.add_coef(0, 1, 1);
-
-        B(0) = 1;
-        B(1) = 1;
-
-        A.assemble_matrix();
-
-        Eigen_solver::Vector X(degree);
-
-
-        Eigen_solver solver;
-
-        Eigen_solver::NT d;
-
-        if (!(solver.linear_solver (A, B, X, d)))
-          {
-            std::cerr << "Error: linear solver failed" << std::endl;
-          }
-        std::cerr << "Linear solve succeeded" << std::endl;
-
-
-        std::cout<<"NT= "<<d<<std::endl;
-
-        std::cout<<"X= "<<X<<std::endl;
-
-
-    }
-
-
-
-private:
-
-    // geometry data
-    PolygonMesh& mesh_;
-    VertexPointMap& vpmap_;
-    Cotangent_weight<PolygonMesh, VertexPointMap> weight_calculator_;
-    Solver_traits solver_;
-    std::size_t nb_vertices;
 
 
 
@@ -202,7 +245,8 @@ void smooth_shape(PolygonMesh& mesh)
     VertexPointMap vpmap = get(CGAL::vertex_point, mesh);
 
     CGAL::Polygon_mesh_processing::Shape_smoother<PolygonMesh, VertexPointMap> smoother(mesh, vpmap);
-    smoother.calculate_coeff_matrix();
+
+    smoother.solve_system();
 
 
 }
