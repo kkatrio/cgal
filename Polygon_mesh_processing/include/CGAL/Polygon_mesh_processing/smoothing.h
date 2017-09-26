@@ -12,6 +12,7 @@
 #include <Eigen/Sparse>
 
 #include <fstream>
+#include <unordered_set>
 
 namespace CGAL {
 
@@ -66,8 +67,8 @@ private:
     typedef typename boost::graph_traits<PolygonMesh>::halfedge_descriptor halfedge_descriptor;
 
     typedef CGAL::Eigen_sparse_matrix<double>::EigenType EigenMatrix;
-   // typedef CGAL::Eigen_solver_traits< Eigen::SimplicialLDLT< EigenMatrix > > Solver_traits;
-     typedef CGAL::Eigen_solver_traits<> Solver_traits;
+    //typedef CGAL::Eigen_solver_traits< Eigen::SimplicialLDLT< EigenMatrix > > Solver_traits;
+    typedef CGAL::Eigen_solver_traits<> Solver_traits;
 
     typedef typename Solver_traits::Matrix Matrix;
     typedef typename Solver_traits::Vector Vector;
@@ -83,10 +84,12 @@ private:
     typedef typename GeomTraits::FT NT;
 
 
+
+
 // data
 private:
 
-    IndexMap vimap = get(boost::vertex_index, mesh_);
+    IndexMap vimap_ = get(boost::vertex_index, mesh_);
 
     // geometry data
     PolygonMesh& mesh_;
@@ -98,6 +101,9 @@ private:
     // linear solver
     Solver_traits solver_;
 
+    // constrained vertices
+    std::unordered_set<vertex_descriptor> constrained_vertices_;
+
 
 // operations
 private:
@@ -107,8 +113,8 @@ private:
 
         for(vertex_descriptor vi : vertices(mesh_))
         {
-            //if(!is_border(vi, mesh_))
-            //{
+            if(!is_border(vi, mesh_))
+            {
                 double sum_Lik = 0;
                 for(halfedge_descriptor h : halfedges_around_source(vi, mesh_))
                 {
@@ -118,16 +124,17 @@ private:
 
                     vertex_descriptor vj = target(h, mesh_);
 
-                    A.add_coef(vimap[vi], vimap[vj], -Lij);
+                    A.add_coef(vimap_[vi], vimap_[vj], -Lij);
                 }
 
                 // diagonal
-                A.add_coef(vimap[vi], vimap[vi], 1.0 - sum_Lik);
-           // }
+                A.add_coef(vimap_[vi], vimap_[vi], 1.0 - sum_Lik);
+            }
         }
 
+        set_constraints(A);
 
-       // A.assemble_matrix(); // remove with set
+        A.assemble_matrix(); // remove with set
     }
 
 
@@ -136,9 +143,9 @@ private:
 
         for(vertex_descriptor vi : vertices(mesh_))
         {
-            //if(!is_border(vi, mesh_)) // border ones do not move
+            //if(!is_border(vi, mesh_))
            // {
-                int index = vimap[vi];
+                int index = vimap_[vi];
                 Point p = get(vpmap_, vi);
                 Bx.set(index, p.x());
                 By.set(index, p.y());
@@ -147,29 +154,68 @@ private:
 
         }
 
-
     }
 
+    void set_constraints(Matrix& A)
+    {
+        typename std::unordered_set<vertex_descriptor>::iterator it;
+        for(it = constrained_vertices_.begin(); it != constrained_vertices_.end(); ++it)
+        {
+            int i = get(vimap_, *it);
+            A.set_coef(i, i, 1, true);
+        }
+    }
 
-/*
     void extract_matrix(Matrix& A)
     {
-
-
-        std::ofstream out("matA.dat");
+        std::ofstream out("data/matA.dat");
         for(int j=0; j < A.column_dimension(); ++j)
         {
             for(int i=0; i < A.row_dimension(); ++i)
             {
-                NT val = A.
-                out<<val;
+                NT val = A.get_coef(i, j);
+                out<<val<<" ";
             }
-            out<<endl;
+            out<<std::endl;
         }
-
         out.close();
     }
-*/
+
+    void extract_solution(Vector& Xx, Vector& Xy, Vector& Xz)
+    {
+        std::ofstream out("data/solution.dat");
+        for(int j=0; j < Xx.dimension(); ++j)
+        {
+            out<<Xx[j]<<"\t"<<Xy[j]<<"\t"<<Xx[j]<<"\t"<<std::endl;
+        }
+        out.close();
+    }
+
+
+    void update_mesh(Vector& Xx, Vector& Xy, Vector& Xz)
+    {
+
+        for (vertex_descriptor v : vertices(mesh_))
+        {
+            int index = get(vimap_, v);
+            NT x_new = Xx[index];
+            NT y_new = Xy[index];
+            NT z_new = Xz[index];
+            put(vpmap_, v, Point(x_new, y_new, z_new));
+        }
+    }
+
+    void gather_constrained_vertices()
+    {
+        for(vertex_descriptor v : vertices(mesh_))
+        {
+            if(is_border(v, mesh_))
+            {
+                constrained_vertices_.insert(v);
+            }
+        }
+    }
+
 
 
 
@@ -187,6 +233,9 @@ public:
 
     void solve_system()
     {
+
+        gather_constrained_vertices();
+
         Matrix A(nb_vert_, nb_vert_);
         Vector Bx(nb_vert_);
         Vector By(nb_vert_);
@@ -206,15 +255,14 @@ public:
            !solver_.linear_solver(A, Bz, Xz, Dz) )
         {
             std::cerr<<"Could not solve linear system!"<<std::endl;
+            bool solved = false;
+            CGAL_assertion(solved);
         }
 
+        //extract_solution(Xx, Xy, Xz);
 
+        update_mesh(Xx, Xy, Xz);
 
-
-
-        std::cout<<"Xx= "<<Xx<<std::endl;
-        std::cout<<"Xy= "<<Xy<<std::endl;
-        std::cout<<"Xz= "<<Xz<<std::endl;
     }
 
 

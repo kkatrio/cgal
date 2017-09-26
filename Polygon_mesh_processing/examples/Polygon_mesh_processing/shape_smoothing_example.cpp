@@ -10,7 +10,7 @@ typedef CGAL::Surface_mesh<K::Point_3> Mesh;
 
 int main(int argc, char* argv[])
 {
-  const char* filename = (argc > 1) ? argv[1] : "data/shape.off";
+  const char* filename = (argc > 1) ? argv[1] : "data/pig.off";
   std::ifstream input(filename);
 
   Mesh mesh;
@@ -21,8 +21,11 @@ int main(int argc, char* argv[])
 
 
 
-
   CGAL::Polygon_mesh_processing::smooth_shape(mesh);
+
+  std::ofstream out("data/pig_smoothed.off");
+  out<<mesh;
+  out.close();
 
 
 
