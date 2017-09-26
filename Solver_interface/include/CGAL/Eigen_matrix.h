@@ -180,6 +180,19 @@ public:
       m_triplets.push_back(Triplet(i,j,val));
   }
 
+
+  NT get_coef (unsigned int i, unsigned int j) const 
+  {    
+    CGAL_precondition(i < row_dimension());
+    CGAL_precondition(j < column_dimension());
+
+    NT val = m_matrix.coeffRef(i,j);
+
+    return  val;
+  }
+
+         
+
   void assemble_matrix() const
   {
     m_matrix.setFromTriplets(m_triplets.begin(), m_triplets.end());
