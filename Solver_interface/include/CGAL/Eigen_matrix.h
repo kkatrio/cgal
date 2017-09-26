@@ -180,7 +180,11 @@ public:
       m_triplets.push_back(Triplet(i,j,val));
   }
 
-
+  /// Read access to a matrix coefficient: a_ij.
+  ///
+  /// @commentheading Preconditions:
+  /// - 0 <= i < row_dimension().
+  /// - 0 <= j < column_dimension().
   NT get_coef (unsigned int i, unsigned int j) const 
   {    
     CGAL_precondition(i < row_dimension());
@@ -190,8 +194,6 @@ public:
 
     return  val;
   }
-
-         
 
   void assemble_matrix() const
   {
