@@ -54,35 +54,28 @@ struct Cotangent_weight : CotangentValue
 
 
 
-
-
-
 template<typename PolygonMesh, typename VertexPointMap>
 class Shape_smoother{
 
 // types
 private:
 
+    typedef typename GetGeomTraits<PolygonMesh>::type GeomTraits;
+    typedef typename GeomTraits::FT NT;
+    typedef typename GeomTraits::Point_3 Point;
+
     typedef typename boost::graph_traits<PolygonMesh>::vertex_descriptor vertex_descriptor;
     typedef typename boost::graph_traits<PolygonMesh>::halfedge_descriptor halfedge_descriptor;
-
-    typedef CGAL::Eigen_sparse_matrix<double>::EigenType EigenMatrix;
-    //typedef CGAL::Eigen_solver_traits< Eigen::SimplicialLDLT< EigenMatrix > > Solver_traits;
-    typedef CGAL::Eigen_solver_traits<> Solver_traits;
-
-    typedef typename Solver_traits::Matrix Matrix;
-    typedef typename Solver_traits::Vector Vector;
-
 
     // vertex index map
     typedef typename boost::property_map<PolygonMesh, boost::vertex_index_t>::type IndexMap;
 
-    typedef typename GetGeomTraits<PolygonMesh>::type GeomTraits;
-
-    typedef typename GeomTraits::Point_3 Point;
-
-    typedef typename GeomTraits::FT NT;
-
+    // solver
+    typedef typename CGAL::Eigen_sparse_matrix<double>::EigenType EigenMatrix;
+    //typedef CGAL::Eigen_solver_traits< Eigen::SimplicialLDLT< EigenMatrix > > Solver_traits;
+    typedef CGAL::Eigen_solver_traits<> Solver_traits; //BicGSTAB
+    typedef typename Solver_traits::Matrix Matrix;
+    typedef typename Solver_traits::Vector Vector;
 
 
 
@@ -115,26 +108,26 @@ private:
         {
             if(!is_border(vi, mesh_))
             {
-                double sum_Lik = 0;
+                NT sum_Lik = 0;
                 for(halfedge_descriptor h : halfedges_around_source(vi, mesh_))
                 {
-                    // calculate weight
-                    double Lij = weight_calculator_(h);
+                    // calculate L
+                    NT Lij = weight_calculator_(h);
                     sum_Lik -= Lij;
 
                     vertex_descriptor vj = target(h, mesh_);
 
-                    A.add_coef(vimap_[vi], vimap_[vj], -Lij);
+                    // A = (I - L) -> 0 - Lij
+                    A.set_coef(vimap_[vi], vimap_[vj], -Lij, true);
                 }
 
-                // diagonal
-                A.add_coef(vimap_[vi], vimap_[vi], 1.0 - sum_Lik);
+                // diagonal, A = (I - L) -> 1 - Lii
+                A.set_coef(vimap_[vi], vimap_[vi], 1.0 - sum_Lik, true);
             }
         }
 
         set_constraints(A);
-
-        A.assemble_matrix(); // remove with set
+        A.assemble_matrix(); // needed?
     }
 
 
@@ -143,26 +136,25 @@ private:
 
         for(vertex_descriptor vi : vertices(mesh_))
         {
-            //if(!is_border(vi, mesh_))
-           // {
-                int index = vimap_[vi];
-                Point p = get(vpmap_, vi);
-                Bx.set(index, p.x());
-                By.set(index, p.y());
-                Bz.set(index, p.z());
-          //  }
+
+            int index = vimap_[vi];
+            Point p = get(vpmap_, vi);
+            Bx.set(index, p.x());
+            By.set(index, p.y());
+            Bz.set(index, p.z());
 
         }
 
     }
 
+    // to be called after gather_constrained_vertices()
     void set_constraints(Matrix& A)
     {
         typename std::unordered_set<vertex_descriptor>::iterator it;
         for(it = constrained_vertices_.begin(); it != constrained_vertices_.end(); ++it)
         {
             int i = get(vimap_, *it);
-            A.set_coef(i, i, 1, true);
+            A.set_coef(i, i, 1.0, true);
         }
     }
 
