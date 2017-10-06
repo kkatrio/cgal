@@ -4,6 +4,7 @@
 #include <CGAL/Polygon_mesh_processing/internal/named_function_params.h>
 #include <CGAL/Polygon_mesh_processing/internal/named_params_helper.h>
 #include <CGAL/Polygon_mesh_processing/Weights.h>
+#include <CGAL/Polygon_mesh_processing/measure.h>
 #include <boost/graph/graph_traits.hpp>
 #include <boost/property_map/property_map.hpp>
 
@@ -50,6 +51,34 @@ struct Cotangent_weight : CotangentValue
     }
 };
 
+template<typename PolygonMesh>
+struct Incident_areas
+{
+
+  Incident_areas(PolygonMesh& mesh) : pmesh(mesh){}
+
+  typedef typename boost::graph_traits<PolygonMesh>::halfedge_descriptor halfedge_descriptor;
+  typedef typename boost::graph_traits<PolygonMesh>::face_descriptor face_descriptor;
+
+  double operator()(halfedge_descriptor he)
+  {
+    halfedge_descriptor hopp = opposite(he, pmesh);
+    face_descriptor f1 = face(he, pmesh);
+    face_descriptor f2 = face(hopp, pmesh);
+    double A1 = face_area(f1, pmesh);
+    double A2 = face_area(f2, pmesh);
+    return A1 + A2;
+  }
+
+  // data
+  PolygonMesh& pmesh;
+
+};
+
+
+
+
+
 
 
 
@@ -71,9 +100,11 @@ private:
     typedef typename boost::property_map<PolygonMesh, boost::vertex_index_t>::type IndexMap;
 
     // solver
-    typedef typename CGAL::Eigen_sparse_matrix<double>::EigenType EigenMatrix;
+    typedef typename CGAL::Eigen_sparse_matrix<double>::EigenType EigenMatrix; 
+
     //typedef CGAL::Eigen_solver_traits< Eigen::SimplicialLDLT< EigenMatrix > > Solver_traits;
     typedef CGAL::Eigen_solver_traits<> Solver_traits; //BicGSTAB
+
     typedef typename Solver_traits::Matrix Matrix;
     typedef typename Solver_traits::Vector Vector;
 
@@ -88,6 +119,7 @@ private:
     PolygonMesh& mesh_;
     VertexPointMap& vpmap_;
     Cotangent_weight<PolygonMesh, VertexPointMap> weight_calculator_;
+    Incident_areas<PolygonMesh> inc_areas_calculator_;
 
     std::size_t nb_vert_;
 
@@ -101,33 +133,87 @@ private:
 // operations
 private:
 
+    Matrix compute_stiffness_matrix()
+    {
+
+      Matrix L(nb_vert_, nb_vert_);
+      for(vertex_descriptor vi : vertices(mesh_))
+      {
+        if(!is_border(vi, mesh_))
+        {
+          NT sum_Lik = 0;
+          for(halfedge_descriptor h : halfedges_around_source(vi, mesh_))
+          {
+            // calculate L
+            NT Lij = weight_calculator_(h);
+            sum_Lik -= Lij;
+
+            vertex_descriptor vj = target(h, mesh_);
+
+            // A = (I - L) -> 0 - Lij
+            //L.set_coef(vimap_[vi], vimap_[vj], -Lij, true);
+            L.set_coef(vimap_[vi], vimap_[vj], Lij, true);
+          }
+
+          // diagonal, A = (I - L) -> 1 - Lii
+          //L.set_coef(vimap_[vi], vimap_[vi], 1.0 - sum_Lik, true);
+          L.set_coef(vimap_[vi], vimap_[vi], sum_Lik, true);
+        }
+      }
+
+      return L;
+    }
+
+
+    Matrix compute_mass_matrix()
+    {
+      Matrix D(nb_vert_, nb_vert_);
+      for(vertex_descriptor vi : vertices(mesh_))
+      {
+        if(!is_border(vi, mesh_))
+        {
+
+          NT sum_Dik = 0;
+          for(halfedge_descriptor h : halfedges_around_source(vi, mesh_))
+          {
+            NT Tij = inc_areas_calculator_(h) / 12.0;
+            sum_Dik += Tij;
+
+            vertex_descriptor vj = target(h, mesh_);
+            D.set_coef(vimap_[vi], vimap_[vj], Tij, true);
+          }
+
+          D.set_coef(vimap_[vi], vimap_[vi], sum_Dik, true);
+
+        }
+      }
+
+      return D;
+    }
+
     void compute_coeff_matrix(Matrix& A)
     {
 
-        for(vertex_descriptor vi : vertices(mesh_))
+      Matrix L = compute_stiffness_matrix();
+      Matrix D = compute_mass_matrix();
+
+      CGAL_assertion(L.row_dimension() == L.column_dimension());
+      CGAL_assertion(D.row_dimension() == D.column_dimension());
+      CGAL_assertion(L.row_dimension() == D.row_dimension() &&
+                     L.column_dimension() == D.column_dimension());
+      CGAL_assertion(L.row_dimension() == A.row_dimension() &&
+                     L.column_dimension() == A.column_dimension());
+
+      for(std::size_t i=0; i<A.row_dimension(); ++i)
+      {
+        for(std::size_t j=0; j<A.column_dimension(); ++j)
         {
-            if(!is_border(vi, mesh_))
-            {
-                NT sum_Lik = 0;
-                for(halfedge_descriptor h : halfedges_around_source(vi, mesh_))
-                {
-                    // calculate L
-                    NT Lij = weight_calculator_(h);
-                    sum_Lik -= Lij;
-
-                    vertex_descriptor vj = target(h, mesh_);
-
-                    // A = (I - L) -> 0 - Lij
-                    A.set_coef(vimap_[vi], vimap_[vj], -Lij, true);
-                }
-
-                // diagonal, A = (I - L) -> 1 - Lii
-                A.set_coef(vimap_[vi], vimap_[vi], 1.0 - sum_Lik, true);
-            }
+          A.set_coef(i, j, D.get_coef(i,j) - L.get_coef(i,j), true);
         }
+      }
 
-        set_constraints(A);
-        A.assemble_matrix(); // needed?
+      set_constraints(A);
+      A.assemble_matrix();
     }
 
 
@@ -136,14 +222,19 @@ private:
 
         for(vertex_descriptor vi : vertices(mesh_))
         {
-
             int index = vimap_[vi];
             Point p = get(vpmap_, vi);
             Bx.set(index, p.x());
             By.set(index, p.y());
             Bz.set(index, p.z());
-
         }
+
+
+        //temp solution: calc D again
+        Matrix D = compute_mass_matrix();
+
+
+
 
     }
 
@@ -208,6 +299,45 @@ private:
         }
     }
 
+    // printing matrix
+    void print(Matrix& Mat)
+    {
+      for(int i=0; i<Mat.row_dimension(); ++i)
+      {
+        for(int j=0; j<Mat.column_dimension(); ++j)
+          std::cout<<Mat.get_coef(i,j)<<" ";
+        std::cout<<std::endl;
+      }
+    }
+
+public:
+    // matrix multiplication
+    Matrix multiply(Matrix& A, Matrix& B)
+    {
+      CGAL_assertion(A.row_dimension()>0 && A.column_dimension()>0);
+      CGAL_assertion(B.row_dimension()>0 && B.column_dimension()>0);
+      CGAL_assertion(A.row_dimension() == B.column_dimension());
+      CGAL_assertion(B.row_dimension() == A.column_dimension());
+
+      std::size_t degree = A.row_dimension();
+      std::size_t sz = A.column_dimension();
+
+      Matrix C(degree, degree);
+      for(std::size_t i=0; i<degree; ++i)
+      {
+        for(std::size_t j=0; j<degree; ++j)
+        {
+          double v =0;
+          for(std::size_t k=0; k<sz; ++k)
+          {
+            v += A.get_coef(i,k) * B.get_coef(k,i);
+          }
+          C.set_coef(i,j,v,true);
+        }
+      }
+
+      return C;
+    }
 
 
 
@@ -219,6 +349,7 @@ public:
 
     Shape_smoother(PolygonMesh& mesh, VertexPointMap& vpmap) : mesh_(mesh), vpmap_(vpmap),
         weight_calculator_(mesh, vpmap),
+        inc_areas_calculator_(mesh),
         nb_vert_(static_cast<int>(vertices(mesh).size()))
     { }
 
@@ -259,8 +390,43 @@ public:
 
 
 
+    void test_matrix_product()
+    {
+
+      Matrix A(3,3);
+
+   /*   double k = 0;
+      for(int i=0; i<3; ++i)
+      {
+        for(int j=0; j<3; ++j)
+        {
+          A.set_coef(i,j,k,true);
+          k++;
+        }
+      }
+
+      Matrix Bh(3,1);
+      for(int i=0; i<3; ++i)
+      {
+        Bh.set_coef(i,1, i*i, true);
+      }
+
+      Matrix Bg(1,3);
+      for(int i=0; i<3; ++i)
+      {
+        Bg.set_coef(1,i, i*i, true);
+      }
+*/
+
+      Matrix X = multiply(A, A);
+      print(X);
 
 
+
+
+
+
+    }
 
 
 
@@ -286,7 +452,8 @@ void smooth_shape(PolygonMesh& mesh)
 
     CGAL::Polygon_mesh_processing::Shape_smoother<PolygonMesh, VertexPointMap> smoother(mesh, vpmap);
 
-    smoother.solve_system();
+    //smoother.solve_system();
+    smoother.test_matrix_product();
 
 
 }
