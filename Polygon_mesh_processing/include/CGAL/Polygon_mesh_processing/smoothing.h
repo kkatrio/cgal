@@ -310,33 +310,34 @@ private:
       }
     }
 
-public:
+
+
     // matrix multiplication
-    Matrix multiply(Matrix& A, Matrix& B)
+    void multiply(Matrix& X, Matrix& A, Matrix& B)
     {
       CGAL_assertion(A.row_dimension()>0 && A.column_dimension()>0);
       CGAL_assertion(B.row_dimension()>0 && B.column_dimension()>0);
-      CGAL_assertion(A.row_dimension() == B.column_dimension());
       CGAL_assertion(B.row_dimension() == A.column_dimension());
 
-      std::size_t degree = A.row_dimension();
+      // since X is referenced
+      CGAL_assertion(X.row_dimension() == A.row_dimension() &&
+                     X.column_dimension() == B.column_dimension());
+
       std::size_t sz = A.column_dimension();
 
-      Matrix C(degree, degree);
-      for(std::size_t i=0; i<degree; ++i)
+      for(std::size_t i=0; i<A.row_dimension(); ++i)
       {
-        for(std::size_t j=0; j<degree; ++j)
+        for(std::size_t j=0; j<B.column_dimension(); ++j)
         {
           double v =0;
           for(std::size_t k=0; k<sz; ++k)
           {
-            v += A.get_coef(i,k) * B.get_coef(k,i);
+            v += A.get_coef(i,k) * B.get_coef(k,j);
           }
-          C.set_coef(i,j,v,true);
+          X.set_coef(i,j,v,true);
         }
       }
 
-      return C;
     }
 
 
@@ -395,7 +396,7 @@ public:
 
       Matrix A(3,3);
 
-   /*   double k = 0;
+      double k = 0;
       for(int i=0; i<3; ++i)
       {
         for(int j=0; j<3; ++j)
@@ -408,21 +409,37 @@ public:
       Matrix Bh(3,1);
       for(int i=0; i<3; ++i)
       {
-        Bh.set_coef(i,1, i*i, true);
+        Bh.set_coef(i,0, i*i, true);
       }
 
       Matrix Bg(1,3);
       for(int i=0; i<3; ++i)
       {
-        Bg.set_coef(1,i, i*i, true);
+        Bg.set_coef(0,i, i*i, true);
       }
-*/
 
-      Matrix X = multiply(A, A);
+
+
+      Matrix X(3,3);
+      multiply(X, A, A);
       print(X);
+      std::cout<<std::endl;
+
+      Matrix a(3,3);
+      multiply(a, Bh, Bg);
+      print(a);
+      std::cout<<std::endl;
+
+      Matrix b(1,1);
+      multiply(b, Bg, Bh);
+      print(b);
+      std::cout<<std::endl;
 
 
-
+      Matrix r(3,1);
+      multiply(r, A, Bh);
+      print(r);
+      std::cout<<std::endl;
 
 
 
