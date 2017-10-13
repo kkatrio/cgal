@@ -198,7 +198,7 @@ private:
       Eigen_matrix D = get_mass_matrix();
 
 
-      double delta = 1.0;
+      double delta = 0.01;
 
 
       //Eigen_matrix D(L.rows(), L.cols());
@@ -230,11 +230,11 @@ private:
       }
 
 
-      //Eigen_matrix D = get_mass_matrix();
+      Eigen_matrix D = get_mass_matrix();
 
 
-      Eigen_matrix D(Bx.rows(), Bx.rows());
-      D.setIdentity();
+      //Eigen_matrix D(Bx.rows(), Bx.rows());
+      //D.setIdentity();
 
 
 
