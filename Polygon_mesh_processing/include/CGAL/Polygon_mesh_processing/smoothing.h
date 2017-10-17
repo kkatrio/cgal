@@ -68,7 +68,8 @@ struct Incident_areas
     double A1 = face_area(f1, pmesh);
     double A2 = face_area(f2, pmesh);
 
-    CGAL_assertion(A1>0 && A2>0);
+    // todo: check degenerecies
+    //CGAL_assertion(A1>0 && A2>0);
 
     return A1 + A2;
   }
@@ -76,10 +77,6 @@ struct Incident_areas
   PolygonMesh& pmesh;
 
 };
-
-
-
-
 
 
 
@@ -143,7 +140,7 @@ private:
 // operations
 private:
 
-
+     // ----------- LINEAR SYSTEM -------- //
     Eigen_matrix get_stiffness_matrix()
     {
       Eigen_matrix mat(nb_vert_, nb_vert_);
@@ -177,7 +174,6 @@ private:
           NT sum_Dik = 0;
           for(halfedge_descriptor h : halfedges_around_source(vi, mesh_))
           {
-            //vertex_descriptor vj = target(h, mesh_);
             NT Dij = inc_areas_calculator_(h) / 12.0;
             sum_Dik += Dij;
             vertex_descriptor vj = target(h, mesh_);
@@ -198,7 +194,7 @@ private:
       Eigen_matrix D = get_mass_matrix();
 
 
-      double delta = 0.01;
+      double delta = 0.0001;
 
 
       //Eigen_matrix D(L.rows(), L.cols());
@@ -251,6 +247,7 @@ private:
     }
 
 
+    // -------------- COPY TO SPARSE SYSTEM ---------- //
     void fill_sparse_matrix(Matrix&A, Eigen_matrix& Ae)
     {
       CGAL_assertion(A.row_dimension() == Ae.rows() &&
@@ -274,6 +271,7 @@ private:
     }
 
 
+    // ---------------- CONSTRAINS ---------------- //
     void gather_constrained_vertices()
     {
       for(vertex_descriptor v : vertices(mesh_))
@@ -300,6 +298,8 @@ private:
       }
     }
 
+
+    // -------------- EXTRACT ----------------- //
     void extract_matrix(Matrix& A)
     {
         std::ofstream out("data/mat.dat");
@@ -329,6 +329,7 @@ private:
     }
 
 
+    // -------------- UPDATE MESH ----------------- //
     void update_mesh(Vector& Xx, Vector& Xy, Vector& Xz)
     {
         for (vertex_descriptor v : vertices(mesh_))
@@ -411,7 +412,7 @@ public:
 
 
 template<typename PolygonMesh>
-void smooth_shape(PolygonMesh& mesh)
+void smooth_shape(PolygonMesh& mesh, unsigned int& nb_iter)
 {
 
     // VPmap type
@@ -420,7 +421,14 @@ void smooth_shape(PolygonMesh& mesh)
 
     CGAL::Polygon_mesh_processing::Shape_smoother<PolygonMesh, VertexPointMap> smoother(mesh, vpmap);
 
-    smoother.solve_system();
+
+    for(unsigned int t=0; t<nb_iter; ++t)
+    {
+      smoother.solve_system();
+    }
+
+
+
 
 
 }

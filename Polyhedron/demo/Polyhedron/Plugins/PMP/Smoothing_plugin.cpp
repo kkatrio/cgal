@@ -87,6 +87,10 @@ public:
 
     void init_ui()
     {
+        ui_widget.smothing_spinBox->setValue(10);
+        ui_widget.smothing_spinBox->setSingleStep(10);
+        ui_widget.smothing_spinBox->setMinimum(1);
+
         /*
         ui_widget.Angle_spinBox->setValue(1);
         ui_widget.Angle_spinBox->setSingleStep(1);
@@ -181,8 +185,9 @@ public Q_SLOTS:
 
         QApplication::setOverrideCursor(Qt::WaitCursor);
 
-        //unsigned int nb_iter = ui_widget.curv_iterations_spinBox->value();
-        CGAL::Polygon_mesh_processing::smooth_shape(pmesh);
+        unsigned int nb_iter = ui_widget.smothing_spinBox->value();
+        std::cout << "nb_iter= " << nb_iter << std::endl;
+        CGAL::Polygon_mesh_processing::smooth_shape(pmesh, nb_iter);
 
         poly_item->invalidateOpenGLBuffers();
         Q_EMIT poly_item->itemChanged();
