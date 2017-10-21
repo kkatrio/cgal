@@ -10,10 +10,12 @@
 
 #include <CGAL/Eigen_solver_traits.h>
 #include <CGAL/Eigen_matrix.h>
+#include <CGAL/barycenter.h>
 #include <Eigen/Sparse>
 
 #include <fstream>
 #include <unordered_set>
+#include <unordered_map>
 
 namespace CGAL {
 
@@ -39,34 +41,119 @@ struct Cotangent_weight : CotangentValue
 
     double operator()(halfedge_descriptor he)
     {
-      halfedge_descriptor h1 = next(he, pmesh());
-      halfedge_descriptor h2 = prev(opposite(he, pmesh()), pmesh());
+      if(is_border_edge(he, pmesh()))
+      {
+        halfedge_descriptor h1 = next(he, pmesh());
+        vertex_descriptor vs = source(he, pmesh());
+        vertex_descriptor vt = target(he, pmesh());
+        vertex_descriptor v1 = target(h1, pmesh());
 
-      vertex_descriptor vs = source(he, pmesh());
-      vertex_descriptor vt = target(he, pmesh());
-      vertex_descriptor v1 = target(h1, pmesh());
-      vertex_descriptor v2 = source(h2, pmesh());
+        return (CotangentValue::operator ()(vs, v1, vt));
+      }
+      else
+      {
+        halfedge_descriptor h1 = next(he, pmesh());
+        halfedge_descriptor h2 = prev(opposite(he, pmesh()), pmesh());
+        vertex_descriptor vs = source(he, pmesh());
+        vertex_descriptor vt = target(he, pmesh());
+        vertex_descriptor v1 = target(h1, pmesh());
+        vertex_descriptor v2 = source(h2, pmesh());
 
-      return ( CotangentValue::operator()(vs, v1, vt) + CotangentValue::operator()(vs, v2, vt) ) / 2.0;
+        return ( CotangentValue::operator()(vs, v1, vt) + CotangentValue::operator()(vs, v2, vt) ) / 2.0;
+      }
     }
 };
 
-template<typename PolygonMesh>
-struct Incident_areas
+template<typename PolygonMesh, typename VertexPointMap>
+class Cotangent_edge_weight
 {
 
-  Incident_areas(PolygonMesh& mesh) : pmesh(mesh){}
+  typedef typename boost::graph_traits<PolygonMesh>::halfedge_descriptor   halfedge_descriptor;
+  typedef typename boost::graph_traits<PolygonMesh>::vertex_descriptor     vertex_descriptor;
+  typedef typename boost::graph_traits<PolygonMesh>::face_descriptor       face_descriptor;
+
+public:
+  Cotangent_edge_weight(PolygonMesh& mesh, VertexPointMap& vmap) : pmesh(mesh), vpmap(vmap) {}
+
+  double operator()(halfedge_descriptor h)
+  {
+
+    face_descriptor f = face(h, pmesh);
+    if(f == boost::graph_traits<PolygonMesh>::null_face())
+    {
+      return 0;
+    }
+    else
+    {
+      halfedge_descriptor hn = next(h, pmesh);
+      halfedge_descriptor hnn = next(hn, pmesh);
+
+      face_descriptor fn = face(hn, pmesh);
+      face_descriptor fnn = face(hnn, pmesh);
+
+      CGAL_assertion(f == fn);
+      CGAL_assertion(f == fnn);
+
+      double l1 = sqlength(hn);
+      double l2 = sqlength(hnn);
+      double l0 = sqlength(h);
+
+      double A = face_area(f, pmesh);
+
+      double cot = (l1 + l2 - l0) / (4 * A);
+
+      return cot;
+    }
+
+  }
+
+
+private:
+
+
+  double sqlength(const vertex_descriptor& v1,
+                  const vertex_descriptor& v2) const
+  {
+    return to_double(CGAL::squared_distance(get(vpmap, v1), get(vpmap, v2)));
+  }
+
+  double sqlength(const halfedge_descriptor& h) const
+  {
+    vertex_descriptor v1 = target(h, pmesh);
+    vertex_descriptor v2 = source(h, pmesh);
+    return sqlength(v1, v2);
+  }
+
+  // data
+  //std::unordered_map<halfedge_descriptor, double> cot_weights;
+  PolygonMesh pmesh;
+  VertexPointMap vpmap;
+
+
+
+
+};
+
+
+
+template<typename PolygonMesh>
+struct Incident_area
+{
+
+  Incident_area(PolygonMesh& mesh) : pmesh(mesh){}
 
   typedef typename boost::graph_traits<PolygonMesh>::halfedge_descriptor halfedge_descriptor;
   typedef typename boost::graph_traits<PolygonMesh>::face_descriptor face_descriptor;
 
   double operator()(halfedge_descriptor he)
   {
+
     halfedge_descriptor hopp = opposite(he, pmesh);
     face_descriptor f1 = face(he, pmesh);
     face_descriptor f2 = face(hopp, pmesh);
-    double A1 = face_area(f1, pmesh);
-    double A2 = face_area(f2, pmesh);
+
+    double A1 = f1 == boost::graph_traits<PolygonMesh>::null_face() ? 0 : face_area(f1, pmesh);
+    double A2 = f2 == boost::graph_traits<PolygonMesh>::null_face() ? 0 : face_area(f2, pmesh);
 
     // todo: check degenerecies
     //CGAL_assertion(A1>0 && A2>0);
@@ -91,9 +178,11 @@ private:
   typedef typename GetGeomTraits<PolygonMesh>::type GeomTraits;
   typedef typename GeomTraits::FT NT;
   typedef typename GeomTraits::Point_3 Point;
+  typedef typename GeomTraits::Triangle_3 Triangle;
 
   typedef typename boost::graph_traits<PolygonMesh>::vertex_descriptor vertex_descriptor;
   typedef typename boost::graph_traits<PolygonMesh>::halfedge_descriptor halfedge_descriptor;
+  typedef typename boost::graph_traits<PolygonMesh>::face_descriptor face_descriptor;
 
   // vertex index map
   typedef typename boost::property_map<PolygonMesh, boost::vertex_index_t>::type IndexMap;
@@ -126,7 +215,10 @@ private:
     PolygonMesh& mesh_;
     VertexPointMap& vpmap_;
     Cotangent_weight<PolygonMesh, VertexPointMap> weight_calculator_;
-    Incident_areas<PolygonMesh> inc_areas_calculator_;
+    Incident_area<PolygonMesh> inc_areas_calculator_;
+
+    // alternative cot weights
+    Cotangent_edge_weight<PolygonMesh, VertexPointMap> weight_calculator2_;
 
     std::size_t nb_vert_;
 
@@ -146,19 +238,22 @@ private:
       Eigen_matrix mat(nb_vert_, nb_vert_);
       for(vertex_descriptor vi : vertices(mesh_))
       {
-        if(!is_border(vi, mesh_))
-        {
+        //if(!is_border(vi, mesh_))
+        //{
           NT sum_Lik = 0;
           for(halfedge_descriptor h : halfedges_around_source(vi, mesh_))
           {
             NT Lij = weight_calculator_(h);
-            sum_Lik -= Lij;
+
+            NT Lij2 = weight_calculator2_(h);
+
+            sum_Lik -= Lij2;
             vertex_descriptor vj = target(h, mesh_);
-            mat.coeffRef(vimap_[vi], vimap_[vj]) = Lij;
+            mat.coeffRef(vimap_[vi], vimap_[vj]) = Lij2;
           }
 
           mat.coeffRef(vimap_[vi], vimap_[vi]) = sum_Lik;
-        }
+       //}
       }
 
       return mat;
@@ -169,8 +264,8 @@ private:
       Eigen_matrix mat(nb_vert_, nb_vert_);
       for(vertex_descriptor vi : vertices(mesh_))
       {
-        if(!is_border(vi, mesh_))
-        {
+        //if(!is_border(vi, mesh_))
+        //{
           NT sum_Dik = 0;
           for(halfedge_descriptor h : halfedges_around_source(vi, mesh_))
           {
@@ -181,7 +276,7 @@ private:
           }
 
           mat.coeffRef(vimap_[vi], vimap_[vi]) = sum_Dik;
-        }
+        //}
       }
 
       return mat;
@@ -194,7 +289,7 @@ private:
       Eigen_matrix D = get_mass_matrix();
 
 
-      double delta = 0.0001;
+      double delta = 0.001;
 
 
       //Eigen_matrix D(L.rows(), L.cols());
@@ -218,11 +313,11 @@ private:
 
       for(vertex_descriptor vi : vertices(mesh_))
       {
-          int index = vimap_[vi];
-          Point p = get(vpmap_, vi);
-          Xx.coeffRef(index) = p.x();
-          Xy.coeffRef(index) = p.y();
-          Xz.coeffRef(index) = p.z();
+        int index = vimap_[vi];
+        Point p = get(vpmap_, vi);
+        Xx.coeffRef(index) = p.x();
+        Xy.coeffRef(index) = p.y();
+        Xz.coeffRef(index) = p.z();
       }
 
 
@@ -231,8 +326,6 @@ private:
 
       //Eigen_matrix D(Bx.rows(), Bx.rows());
       //D.setIdentity();
-
-
 
 
       Eigen_vector Bxe = D * Xx;
@@ -293,13 +386,13 @@ private:
         A.set_coef(i, i, 1.0);
 
         // also set all cols of the same row = 0 - not needed
-        //for(std::size_t j = 0; j<A.column_dimension(); ++j)
-        //  A.set_coef(i, j, 0);
+        for(std::size_t j = 0; j<A.column_dimension(); ++j)
+          A.set_coef(i, j, 0);
       }
     }
 
 
-    // -------------- EXTRACT ----------------- //
+    // -------------- EXTRACT : to move to debug file----------------- //
     void extract_matrix(Matrix& A)
     {
         std::ofstream out("data/mat.dat");
@@ -330,7 +423,62 @@ private:
 
 
     // -------------- UPDATE MESH ----------------- //
-    void update_mesh(Vector& Xx, Vector& Xy, Vector& Xz)
+
+    Triangle triangle(face_descriptor f) const
+    {
+      halfedge_descriptor h = halfedge(f, mesh_);
+      vertex_descriptor v1  = target(h, mesh_);
+      vertex_descriptor v2  = target(next(h, mesh_), mesh_);
+      vertex_descriptor v3  = target(next(next(h, mesh_), mesh_), mesh_);
+      return Triangle(get(vpmap_, v1), get(vpmap_, v2), get(vpmap_, v3));
+    }
+
+    void translate_centroid(Vector& Xx, Vector& Xy, Vector& Xz)
+    {
+
+      std::vector<std::pair<Point, NT>> barycenters;
+
+      for(face_descriptor f : faces(mesh_))
+      {
+       Point tr_centroid = CGAL::centroid(triangle(f));
+       barycenters.push_back(std::make_pair(tr_centroid, face_area(f, mesh_)));
+      }
+
+      Point centroid = CGAL::barycenter(barycenters.begin(), barycenters.end());
+      std::cout << "centroid= " << centroid << std::endl;
+
+      for(std::size_t i=0; i < Xx.rows(); ++i)
+      {
+        Xx[i] -= centroid.x();
+        Xy[i] -= centroid.y();
+        Xz[i] -= centroid.z();
+      }
+
+    }
+
+    void normalize_area(Vector& Xx, Vector& Xy, Vector& Xz)
+    {
+
+      NT surface_area = area(faces(mesh_), mesh_);
+
+      for(std::size_t i=0; i < Xx.rows(); ++i)
+      {
+        Xx[i] /= CGAL::sqrt(surface_area);
+        Xy[i] /= CGAL::sqrt(surface_area);
+        Xz[i] /= CGAL::sqrt(surface_area);
+      }
+
+
+      /*
+      Xx /= surface_area;
+      Xy /= surface_area;
+      Xz /= surface_area;
+      */
+
+    }
+
+
+    void update_map(Vector& Xx, Vector& Xy, Vector& Xz)
     {
         for (vertex_descriptor v : vertices(mesh_))
         {
@@ -350,6 +498,7 @@ public:
 
   Shape_smoother(PolygonMesh& mesh, VertexPointMap& vpmap) : mesh_(mesh), vpmap_(vpmap),
       weight_calculator_(mesh, vpmap),
+      weight_calculator2_(mesh, vpmap), /////// <--
       inc_areas_calculator_(mesh),
       nb_vert_(static_cast<int>(vertices(mesh).size()))
   { }
@@ -370,7 +519,7 @@ public:
 
     //-----------
     compute_coeff_matrix(A);
-    apply_constraints(A);
+    //apply_constraints(A);
     //----------
 
     //extract_matrix(A);
@@ -393,8 +542,24 @@ public:
         CGAL_assertion(solved);
     }
 
+    extract_vectors(Xx,Xy,Xz);
 
-    update_mesh(Xx, Xy, Xz);
+    //translate_centroid(Xx, Xy, Xz);
+    //extract_vectors(Xx,Xy,Xz);
+
+    NT surface_area = area(faces(mesh_), mesh_);
+    std::cout << "area= " << surface_area << std::endl;
+    std::cout << "area sqrt= " << CGAL::sqrt(surface_area) << std::endl;
+
+
+    normalize_area(Xx, Xy, Xz);
+    //extract_vectors(Xx, Xy, Xz);
+
+    update_map(Xx, Xy, Xz);
+
+    surface_area = area(faces(mesh_), mesh_);
+    std::cout << "surface_area normalized= " << surface_area << std::endl;
+
 
   }
 
@@ -412,7 +577,7 @@ public:
 
 
 template<typename PolygonMesh>
-void smooth_shape(PolygonMesh& mesh, unsigned int& nb_iter)
+void smooth_shape(PolygonMesh& mesh, int nb_iter)
 {
 
     // VPmap type
