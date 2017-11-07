@@ -60,6 +60,7 @@ public:
 
         //connect(ui_widget.Apply_button,  SIGNAL(clicked()), this, SLOT(on_Apply_by_type_clicked()));
         connect(ui_widget.shape_smoothing_button,  SIGNAL(clicked()), this, SLOT(on_Apply_smoothing_clicked()));
+        connect(ui_widget.setup_system_button,  SIGNAL(clicked()), this, SLOT(on_Setup_system_clicked()));
         //connect(ui_widget.Run_convergence_button,  SIGNAL(clicked()), this, SLOT(on_Run_convergence_clicked()));
 
     }
@@ -85,21 +86,14 @@ public:
       dock_widget->hide();
     }
 
+private:
     void init_ui()
     {
-        ui_widget.smothing_spinBox->setValue(10);
+        ui_widget.smothing_spinBox->setValue(1);
         ui_widget.smothing_spinBox->setSingleStep(10);
         ui_widget.smothing_spinBox->setMinimum(1);
 
         /*
-        ui_widget.Angle_spinBox->setValue(1);
-        ui_widget.Angle_spinBox->setSingleStep(1);
-        ui_widget.Angle_spinBox->setMinimum(1);
-
-        ui_widget.Area_spinBox->setValue(1);
-        ui_widget.Area_spinBox->setSingleStep(1);
-        ui_widget.Area_spinBox->setMinimum(1);
-
         ui_widget.gd_dSpinBox->setSingleStep(0.0001);
         ui_widget.gd_dSpinBox->setDecimals(4);
         ui_widget.gd_dSpinBox->setMinimum(0.0001);
@@ -125,6 +119,12 @@ public:
         */
     }
 
+    void init_parameters()
+    {
+
+    }
+
+
 public Q_SLOTS:
     void smoothing_action()
     {
@@ -140,42 +140,20 @@ public Q_SLOTS:
         }
     }
 
-    /*
-    void on_Apply_by_type_clicked()
+    void on_Setup_system_clicked()
     {
-        const Scene_interface::Item_id index = scene->mainSelectionIndex();
-        Scene_polyhedron_item* poly_item = qobject_cast<Scene_polyhedron_item*>(scene->item(index));
-        Polyhedron& pmesh = *poly_item->polyhedron();
+       const Scene_interface::Item_id index = scene->mainSelectionIndex();
+       Scene_polyhedron_item* poly_item = qobject_cast<Scene_polyhedron_item*>(scene->item(index));
+       Polyhedron& pmesh = *poly_item->polyhedron();
 
-        QApplication::setOverrideCursor(Qt::WaitCursor);
+       QApplication::setOverrideCursor(Qt::WaitCursor);
 
-        if(ui_widget.Angle_checkBox->isChecked())
-        {
-            unsigned int nb_iter = ui_widget.Angle_spinBox->value();
-            bool use_weights = ui_widget.use_weights_checkBox->isChecked();
-            angle_smoothing(pmesh,
-                            parameters::number_of_iterations(nb_iter).
-                            use_weights(use_weights));
+       CGAL::Polygon_mesh_processing::setup_system(pmesh, stiffness_matrix);
 
-            poly_item->invalidateOpenGLBuffers();
-            Q_EMIT poly_item->itemChanged();
-        }
+       QApplication::restoreOverrideCursor();
 
-        if(ui_widget.Area_checkBox->isChecked())
-        {
-            unsigned int nb_iter = ui_widget.Area_spinBox->value();
-            double gd_precision = ui_widget.gd_dSpinBox->value();
-            area_smoothing(pmesh,
-                           parameters::number_of_iterations(nb_iter).
-                           gradient_descent_precision(gd_precision));
-
-            poly_item->invalidateOpenGLBuffers();
-            Q_EMIT poly_item->itemChanged();
-        }
-
-        QApplication::restoreOverrideCursor();
     }
-    */
+
 
     void on_Apply_smoothing_clicked()
     {
@@ -187,7 +165,7 @@ public Q_SLOTS:
 
         unsigned int nb_iter = ui_widget.smothing_spinBox->value();
         std::cout << "nb_iter= " << nb_iter << std::endl;
-        CGAL::Polygon_mesh_processing::smooth_shape(pmesh, nb_iter);
+        CGAL::Polygon_mesh_processing::smooth_shape(pmesh, nb_iter, stiffness_matrix);
 
         poly_item->invalidateOpenGLBuffers();
         Q_EMIT poly_item->itemChanged();
@@ -229,6 +207,9 @@ private:
     QAction* actionSmoothing_;
     QDockWidget* dock_widget;
     Ui::Smoothing ui_widget;
+
+    typedef typename Eigen::SparseMatrix<double> Eigen_matrix;
+    Eigen_matrix stiffness_matrix;
 
 
 

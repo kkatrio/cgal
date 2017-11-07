@@ -51,7 +51,7 @@ double measure_radius(Mesh& mesh)
 
 int main(int argc, char* argv[])
 {
-  const char* filename = (argc > 1) ? argv[1] : "data/sphere.off";
+  const char* filename = (argc > 1) ? argv[1] : "data/shape.off";
   std::ifstream input(filename);
 
   Mesh mesh;
@@ -61,11 +61,11 @@ int main(int argc, char* argv[])
   }
 
 
-  CGAL::Polygon_mesh_processing::smooth_shape(mesh);
+  CGAL::Polygon_mesh_processing::smooth_shape(mesh, 1);
 
 
 
-  std::ofstream out("data/sphere_smoothed.off");
+  std::ofstream out("data/shape_smoothed.off");
   out<<mesh;
   out.close();
 

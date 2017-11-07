@@ -228,6 +228,9 @@ private:
     // constrained vertices
     std::unordered_set<vertex_descriptor> constrained_vertices_;
 
+    // stiffness matrix - TEMP
+    Eigen_matrix L_;
+
 
 // operations
 private:
@@ -245,11 +248,11 @@ private:
           {
             NT Lij = weight_calculator_(h);
 
-            NT Lij2 = weight_calculator2_(h);
+            //NT Lij2 = weight_calculator2_(h);
 
-            sum_Lik -= Lij2;
+            sum_Lik -= Lij;
             vertex_descriptor vj = target(h, mesh_);
-            mat.coeffRef(vimap_[vi], vimap_[vj]) = Lij2;
+            mat.coeffRef(vimap_[vi], vimap_[vj]) = Lij;
           }
 
           mat.coeffRef(vimap_[vi], vimap_[vi]) = sum_Lik;
@@ -283,10 +286,104 @@ private:
     }
 
 
-    void compute_coeff_matrix(Matrix& A)
+    Eigen_matrix cot_entries()
     {
-      Eigen_matrix L = get_stiffness_matrix();
-      Eigen_matrix D = get_mass_matrix();
+      Eigen_matrix C(nb_vert_, nb_vert_);
+
+      for(vertex_descriptor v : vertices(mesh_))
+      {
+        for(halfedge_descriptor h : halfedges_around_source(v, mesh_))
+        {
+          NT Lij = weight_calculator_(h);
+
+          vertex_descriptor v_source = source(h, mesh_);
+          vertex_descriptor v_target = target(h, mesh_);
+          auto i_source = vimap_[v_source];
+          auto i_target = vimap_[v_target];
+
+          C.coeffRef(i_source, i_target) = Lij;
+        }
+      }
+
+      return C;
+    }
+
+    Eigen_matrix stiff_matrix()
+    {
+      Eigen_matrix mat(nb_vert_, nb_vert_);
+
+      // cot values
+      Eigen_matrix C = cot_entries();
+
+      for(face_descriptor f : faces(mesh_))
+      {
+
+        for(halfedge_descriptor hi : halfedges_around_face(halfedge(f, mesh_), mesh_))
+        {
+          vertex_descriptor v_source = source(hi, mesh_);
+          vertex_descriptor v_target = target(hi, mesh_);
+          auto i_source = vimap_[v_source];
+          auto i_target = vimap_[v_target];
+
+          auto cot_val = C.coeff(i_source, i_target);
+          // i,j
+          mat.coeffRef(i_source, i_target) += cot_val; // why not (i,j)
+          // j,i
+          mat.coeffRef(i_target, i_source) += cot_val;
+          //diagonal
+          mat.coeffRef(i_source, i_source) -= cot_val;
+          mat.coeffRef(i_target, i_target) -= cot_val;
+
+
+        }
+      }
+
+      return mat / 2.0;
+    }
+
+
+    Eigen_matrix mass_matrix()
+    {
+      Eigen_matrix mat(nb_vert_, nb_vert_);
+
+
+      for(face_descriptor f : faces(mesh_))
+      {
+
+        double area = face_area(f, mesh_);
+
+        for(vertex_descriptor v : vertices_around_face(halfedge(f, mesh_), mesh_))
+        {
+          auto indx = vimap_[v];
+          mat.coeffRef(indx, indx) += 2.0 * area;
+        }
+
+      }
+
+      //export_eigen_matrix(mat, "data/D");
+
+      mat /= 6.0;
+
+      //export_eigen_matrix(mat, "data/D12");
+
+      return mat;
+    }
+
+
+
+
+    void compute_coeff_matrix(Matrix& A, Eigen_matrix& L)
+    {
+      //Eigen_matrix L = get_stiffness_matrix();
+
+      //Eigen_matrix L = stiff_matrix();
+
+      export_eigen_matrix(L, "data/L");
+
+      //Eigen_matrix D = get_mass_matrix();
+      Eigen_matrix D = mass_matrix();
+
+      export_eigen_matrix(D, "data/D");
 
 
       double delta = 0.001;
@@ -300,6 +397,10 @@ private:
 
 
       fill_sparse_matrix(A, Ae);
+
+      A.assemble_matrix();
+
+      // assemble matrix ??
 
     }
 
@@ -321,7 +422,9 @@ private:
       }
 
 
-      Eigen_matrix D = get_mass_matrix();
+      //Eigen_matrix D = get_mass_matrix();
+      Eigen_matrix D = mass_matrix();
+
 
 
       //Eigen_matrix D(Bx.rows(), Bx.rows());
@@ -345,6 +448,8 @@ private:
     {
       CGAL_assertion(A.row_dimension() == Ae.rows() &&
                      A.column_dimension() == Ae.cols());
+
+      // this is not great
       for(std::size_t i=0; i<Ae.rows(); ++i)
       {
         for(std::size_t j=0; j<Ae.cols(); ++j)
@@ -386,8 +491,8 @@ private:
         A.set_coef(i, i, 1.0);
 
         // also set all cols of the same row = 0 - not needed
-        for(std::size_t j = 0; j<A.column_dimension(); ++j)
-          A.set_coef(i, j, 0);
+        //for(std::size_t j = 0; j<A.column_dimension(); ++j)
+        //  A.set_coef(i, j, 0);
       }
     }
 
@@ -421,6 +526,22 @@ private:
       out.close();
     }
 
+    void export_eigen_matrix(Eigen_matrix& A, const char* filename)
+    {
+
+      std::ofstream out(filename);
+      for(auto i=0; i < A.rows(); ++i)
+      {
+          for(auto j=0; j < A.cols(); ++j)
+          {
+              NT val = A.coeff(i, j);
+              out<<val<<" ";
+          }
+          out<<std::endl;
+      }
+      out.close();
+    }
+
 
     // -------------- UPDATE MESH ----------------- //
 
@@ -440,8 +561,8 @@ private:
 
       for(face_descriptor f : faces(mesh_))
       {
-       Point tr_centroid = CGAL::centroid(triangle(f));
-       barycenters.push_back(std::make_pair(tr_centroid, face_area(f, mesh_)));
+        Point tr_centroid = CGAL::centroid(triangle(f));
+        barycenters.push_back(std::make_pair(tr_centroid, face_area(f, mesh_)));
       }
 
       Point centroid = CGAL::barycenter(barycenters.begin(), barycenters.end());
@@ -501,13 +622,24 @@ public:
       weight_calculator2_(mesh, vpmap), /////// <--
       inc_areas_calculator_(mesh),
       nb_vert_(static_cast<int>(vertices(mesh).size()))
-  { }
+  {  }
+
+  /*void init()
+  {
+    L_ = stiff_matrix();
+  }*/
+
+  Eigen_matrix calc_stiff_matrix()
+  {
+    Eigen_matrix L = stiff_matrix();
+    return L;
+  }
 
 
-  void solve_system()
+  void solve_system(Eigen::SparseMatrix<double>& L)
   {
 
-    gather_constrained_vertices();
+    //gather_constrained_vertices();
 
     Matrix A(nb_vert_, nb_vert_);
     Vector Bx(nb_vert_);
@@ -517,17 +649,16 @@ public:
     Vector Xy(nb_vert_);
     Vector Xz(nb_vert_);
 
-    //-----------
-    compute_coeff_matrix(A);
+
+    compute_coeff_matrix(A, L);
+
     //apply_constraints(A);
-    //----------
+
 
     //extract_matrix(A);
 
 
-    //-------------
     compute_rhs(Bx, By, Bz);
-    //------------
 
     //extract_vectors(Bx,By,Bz);
 
@@ -542,9 +673,9 @@ public:
         CGAL_assertion(solved);
     }
 
-    extract_vectors(Xx,Xy,Xz);
+    //extract_vectors(Xx,Xy,Xz);
 
-    //translate_centroid(Xx, Xy, Xz);
+    translate_centroid(Xx, Xy, Xz);
     //extract_vectors(Xx,Xy,Xz);
 
     NT surface_area = area(faces(mesh_), mesh_);
@@ -565,32 +696,43 @@ public:
 
 
 
-
-
 };
 
 
 
+
+template<typename PolygonMesh>
+void setup_system(PolygonMesh& mesh, Eigen::SparseMatrix<double>& stiffness_matrix)
+{
+  // VPmap type
+  typedef typename boost::property_map<PolygonMesh, CGAL::vertex_point_t>::type VertexPointMap;
+  VertexPointMap vpmap = get(CGAL::vertex_point, mesh);
+
+  CGAL::Polygon_mesh_processing::Shape_smoother<PolygonMesh, VertexPointMap> smoother(mesh, vpmap);
+
+  stiffness_matrix = smoother.calc_stiff_matrix();
+
+}
 
 
 
 
 
 template<typename PolygonMesh>
-void smooth_shape(PolygonMesh& mesh, int nb_iter)
+void smooth_shape(PolygonMesh& mesh, int nb_iter, Eigen::SparseMatrix<double>& stiffness_matrix)
 {
 
-    // VPmap type
-    typedef typename boost::property_map<PolygonMesh, CGAL::vertex_point_t>::type VertexPointMap;
-    VertexPointMap vpmap = get(CGAL::vertex_point, mesh);
+  // VPmap type
+  typedef typename boost::property_map<PolygonMesh, CGAL::vertex_point_t>::type VertexPointMap;
+  VertexPointMap vpmap = get(CGAL::vertex_point, mesh);
 
-    CGAL::Polygon_mesh_processing::Shape_smoother<PolygonMesh, VertexPointMap> smoother(mesh, vpmap);
+  CGAL::Polygon_mesh_processing::Shape_smoother<PolygonMesh, VertexPointMap> smoother(mesh, vpmap);
 
 
-    for(unsigned int t=0; t<nb_iter; ++t)
-    {
-      smoother.solve_system();
-    }
+  for(unsigned int t=0; t<nb_iter; ++t)
+  {
+    smoother.solve_system(stiffness_matrix);
+  }
 
 
 
