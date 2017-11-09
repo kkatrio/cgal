@@ -520,6 +520,7 @@ protected:
                                   k,
                                   Is_selected_from_set<poly_edge_descriptor>(selection),
                                   CGAL::Emptyset_iterator());
+
     return selection;
   }
 
@@ -705,7 +706,11 @@ protected:
       pen.setColor(QColor(Qt::green));
       pen.setWidth(3);
       //Create a QImage of the screen and paint the lasso on top of it
+#if QGLVIEWER_VERSION >= 0x020700
+      QImage image = viewer->grabFramebuffer();
+#else
       QImage image = viewer->grabFrameBuffer();
+#endif
       painter->begin(viewer);
       painter->drawImage(QPoint(0,0), image);
       painter->setPen(pen);

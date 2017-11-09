@@ -32,6 +32,11 @@ if(NOT DOXYGEN_FOUND)
   return()
 endif()
 
+#starting from cmake 3.9 the usage of DOXYGEN_EXECUTABLE is deprecated
+if(TARGET Doxygen::doxygen)
+  get_property(DOXYGEN_EXECUTABLE TARGET Doxygen::doxygen PROPERTY IMPORTED_LOCATION)
+endif()
+
 # Visual Studio users might appreciate this
 # set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 
@@ -231,6 +236,25 @@ if(${CGAL_BUILD_MONTH} GREATER 6)
   set(CGAL_RELEASE_YEAR_ID "${CGAL_BUILD_YEAR2}b")
 else()
   set(CGAL_RELEASE_YEAR_ID "${CGAL_BUILD_YEAR2}a")
+endif()
+
+if (NOT CGAL_CREATED_VERSION_NUM)
+  if (CGAL_BRANCH_BUILD)
+    file(STRINGS "${CGAL_ROOT}/Maintenance/release_building/MAJOR_NUMBER" CGAL_MAJOR_VERSION REGEX "[0-9]*")
+    file(STRINGS "${CGAL_ROOT}/Maintenance/release_building/MINOR_NUMBER" CGAL_MINOR_VERSION REGEX "[0-9]*")
+    file(STRINGS "${CGAL_ROOT}/Maintenance/release_building/BUGFIX_NUMBER" CGAL_BUGFIX_VERSION REGEX "[0-9]*")
+
+    if (CGAL_BUGFIX_VERSION AND CGAL_BUGFIX_VERSION GREATER 0)
+      set(CGAL_CREATED_VERSION_NUM "${CGAL_MAJOR_VERSION}.${CGAL_MINOR_VERSION}.${CGAL_BUGFIX_VERSION}")
+    else()
+      set(CGAL_CREATED_VERSION_NUM "${CGAL_MAJOR_VERSION}.${CGAL_MINOR_VERSION}")
+    endif()
+  else()
+    #read version.h and get the line with CGAL_VERSION
+    file(STRINGS "${CGAL_ROOT}/include/CGAL/version.h" CGAL_VERSION_LINE REGEX "CGAL_VERSION ")
+    #extract release id
+    string(REGEX MATCH "[0-9]+\\.[0-9]+\\.?[0-9]*(-Ic-)?[0-9]*" CGAL_CREATED_VERSION_NUM "${CGAL_VERSION_LINE}")
+  endif()
 endif()
 
 # Introduce our own version variable. This way we avoid tying this too

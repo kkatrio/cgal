@@ -17,6 +17,8 @@
 #include <CGAL/Polygon_mesh_processing/orient_polygon_soup.h>
 #include <CGAL/Polygon_mesh_processing/polygon_soup_to_polygon_mesh.h>
 #include <CGAL/Polygon_mesh_processing/connected_components.h>
+#include <CGAL/Three/Scene_print_item_interface.h>
+
 #include "Polyhedron_demo_detect_sharp_edges.h"
 
 // Laurent Rineau, 2016/04/07: that header should not be included here, but
@@ -77,7 +79,7 @@ struct Selection_traits<typename SelectionItem::fg_vertex_descriptor, SelectionI
   void update_indices() { item->polyhedron_item()->update_vertex_indices(); }
   std::size_t id(typename SelectionItem::fg_vertex_descriptor  vh)
   {
-    return get(get(CGAL::vertex_selection, *item->polyhedron()), vh);
+    return get(get(boost::vertex_index, *item->polyhedron()), vh);
   }
 
   template <class VertexRange, class HalfedgeGraph, class IsVertexSelectedPMap, class OutputIterator>
@@ -122,7 +124,7 @@ struct Selection_traits<typename SelectionItem::fg_face_descriptor, SelectionIte
   void update_indices() { item->polyhedron_item()->update_facet_indices(); }
   std::size_t id(typename SelectionItem::fg_face_descriptor fh)
 {
-  return get(get(CGAL::face_selection, *item->polyhedron()), fh);
+  return get(get(boost::face_index, *item->polyhedron()), fh);
 }
 
   template <class FaceRange, class HalfedgeGraph, class IsFaceSelectedPMap, class OutputIterator>
@@ -201,9 +203,12 @@ struct Selection_traits<typename SelectionItem::fg_edge_descriptor, SelectionIte
 //////////////////////////////////////////////////////////////////////////
 struct Scene_polyhedron_selection_item_priv;
 class SCENE_POLYHEDRON_SELECTION_ITEM_EXPORT Scene_polyhedron_selection_item 
-  : public Scene_polyhedron_item_decorator
+  : public Scene_polyhedron_item_decorator,
+    public CGAL::Three::Scene_print_item_interface
 {
   Q_OBJECT
+  Q_INTERFACES(CGAL::Three::Scene_print_item_interface)
+  Q_PLUGIN_METADATA(IID "com.geometryfactory.PolyhedronDemo.PrintInterface/1.0")
 
 friend class Polyhedron_demo_selection_plugin;
 
@@ -220,6 +225,14 @@ public:
   ~Scene_polyhedron_selection_item();
   void inverse_selection();
   void setPathSelection(bool b);
+  //For ID printing
+  void printPrimitiveId(QPoint, CGAL::Three::Viewer_interface*);
+  bool printVertexIds(CGAL::Three::Viewer_interface*) const;
+  bool printEdgeIds(CGAL::Three::Viewer_interface*) const;
+  bool printFaceIds(CGAL::Three::Viewer_interface*) const;
+  void printAllIds(CGAL::Three::Viewer_interface*);
+  bool testDisplayId(double, double, double, CGAL::Three::Viewer_interface*)const;
+  bool shouldDisplayIds(CGAL::Three::Scene_item *current_item) const;
 
 protected: 
   void init(Scene_face_graph_item* poly_item, QMainWindow* mw);
@@ -281,6 +294,7 @@ public:
     boost::optional<CGAL::Bbox_3> item_bbox
       = boost::make_optional(false, CGAL::Bbox_3());
 
+
     for(Selection_set_vertex::const_iterator v_it = selected_vertices.begin(); 
         v_it != selected_vertices.end(); ++v_it) {
 
@@ -306,7 +320,11 @@ public:
       }
     }
 
-    if(!item_bbox) { _bbox = this->poly_item->bbox(); return;}
+    if(!item_bbox)
+    {
+      _bbox = this->poly_item->bbox();
+      return;
+    }
     _bbox = Bbox(item_bbox->xmin(),item_bbox->ymin(),item_bbox->zmin(),
                 item_bbox->xmax(),item_bbox->ymax(),item_bbox->zmax());
   }
@@ -629,7 +647,10 @@ public:
     std::vector<bool> mark(tr.size(),false);
 
     BOOST_FOREACH(Handle h,tr.container())
-      mark[tr.id(h)]=true;
+    {
+      std::size_t id = tr.id(h);
+      mark[id]=true;
+    }
 
     typedef typename boost::property_map<Face_graph,Tag>::type PM;
     Tr::expand_selection(
@@ -764,11 +785,10 @@ public:
   {
     CGAL::detect_sharp_edges(polyhedron(), angle);
 
-    boost::property_map<Face_graph,CGAL::halfedge_is_feature_t>::type is_feature = get(CGAL::halfedge_is_feature,*polyhedron());
+    boost::property_map<Face_graph,CGAL::edge_is_feature_t>::type is_feature = get(CGAL::edge_is_feature,*polyhedron());
     BOOST_FOREACH(fg_edge_descriptor e, edges(*polyhedron()))
     {
-      fg_halfedge_descriptor h = halfedge(e, *polyhedron());
-      if (get(is_feature,h))
+      if (get(is_feature,e))
         selected_edges.insert(e);
     }
     invalidateOpenGLBuffers();
@@ -778,6 +798,7 @@ public:
     // no need to update indices
     poly_item->invalidateOpenGLBuffers();
     Q_EMIT poly_item->itemChanged();
+    compute_normal_maps();
     Q_EMIT itemChanged();
   }
 

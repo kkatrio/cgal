@@ -3,7 +3,6 @@
 #include "Scene_polygon_soup_item_config.h"
 #include  <CGAL/Three/Scene_item.h>
 #include "Polyhedron_type.h"
-
 #include "SMesh_type.h"
 
 #include <boost/foreach.hpp>
@@ -99,15 +98,17 @@ struct Polygon_soup
 
 
 class Scene_polyhedron_item;
+class Scene_surface_mesh_item;
 
 class SCENE_POLYGON_SOUP_ITEM_EXPORT Scene_polygon_soup_item 
         : public CGAL::Three::Scene_item
 {
-    typedef Kernel::Point_3 Point_3;
-    typedef Polygon_soup::Points Points;
-
     Q_OBJECT
 public:  
+    typedef Kernel::Point_3 Point_3;
+    typedef Polygon_soup::Points Points;
+    typedef Polygon_soup::Polygons Polygons;
+
     Scene_polygon_soup_item();
     ~Scene_polygon_soup_item();
 
@@ -115,9 +116,15 @@ public:
 
     template <class Point, class Polygon>
     void load(const std::vector<Point>& points, const std::vector<Polygon>& polygons);
+    
+    template <class Point, class Polygon>
+    void load(const std::vector<Point>& points, const std::vector<Polygon>& polygons,
+              const std::vector<CGAL::Color>& fcolors,
+              const std::vector<CGAL::Color>& vcolors);
 
     bool load(std::istream& in);
     void load(Scene_polyhedron_item*);
+    void load(Scene_surface_mesh_item*);
     bool isDataColored();
 
     bool save(std::ostream& out) const;
@@ -143,6 +150,8 @@ public:
     void init_polygon_soup(std::size_t nb_pts, std::size_t nb_polygons);
 
     const Points& points() const;
+    const Polygons& polygons() const;
+
 public Q_SLOTS:
     void shuffle_orientations();
     bool orient();

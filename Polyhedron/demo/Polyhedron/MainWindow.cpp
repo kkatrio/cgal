@@ -141,9 +141,9 @@ MainWindow::MainWindow(QWidget* parent)
 
   // setup scene
   scene = new Scene(this);
-  viewer->textRenderer->setScene(scene);
+  viewer->textRenderer()->setScene(scene);
   viewer->setScene(scene);
-  ui->actionMaxTextItemsDisplayed->setText(QString("Set Maximum Text Items Displayed : %1").arg(viewer->textRenderer->getMax_textItems()));
+  ui->actionMaxTextItemsDisplayed->setText(QString("Set Maximum Text Items Displayed : %1").arg(viewer->textRenderer()->getMax_textItems()));
   {
     QShortcut* shortcut = new QShortcut(QKeySequence(Qt::ALT+Qt::Key_Q), this);
     connect(shortcut, SIGNAL(activated()),
@@ -184,8 +184,8 @@ MainWindow::MainWindow(QWidget* parent)
   connect(scene, SIGNAL(itemAboutToBeDestroyed(CGAL::Three::Scene_item*)),
           this, SLOT(removeManipulatedFrame(CGAL::Three::Scene_item*)));
 
-  connect(scene, SIGNAL(updated_bbox()),
-          this, SLOT(updateViewerBBox()));
+  connect(scene, SIGNAL(updated_bbox(bool)),
+          this, SLOT(updateViewerBBox(bool)));
 
   connect(scene, SIGNAL(selectionChanged(int)),
           this, SLOT(selectSceneItem(int)));
@@ -241,10 +241,8 @@ MainWindow::MainWindow(QWidget* parent)
   // can easily copy-paste its text.
   // connect(ui->infoLabel, SIGNAL(customContextMenuRequested(const QPoint & )),
   //         this, SLOT(showSceneContextMenu(const QPoint &)));
-
   connect(ui->actionRecenterScene, SIGNAL(triggered()),
           viewer, SLOT(update()));
-
   connect(ui->actionAntiAliasing, SIGNAL(toggled(bool)),
           viewer, SLOT(setAntiAliasing(bool)));
 
@@ -754,6 +752,9 @@ void MainWindow::viewerShow(float xmin,
   qglviewer::Vec
     min_(xmin, ymin, zmin),
     max_(xmax, ymax, zmax);
+
+  if(min_ == max_) return viewerShow(xmin, ymin, zmin);
+
 #if QGLVIEWER_VERSION >= 0x020502
   viewer->camera()->setPivotPoint((min_+max_)*0.5);
 #else
@@ -791,28 +792,37 @@ void MainWindow::message(QString message, QString colorName, QString font) {
     message.remove(message.length()-1, 1);
   }
   statusBar()->showMessage(message, 5000);
+  QTimer::singleShot(5000, [this]{this->statusBar()->setStyleSheet("");});
   message = "<font color=\"" + colorName + "\" style=\"font-style: " + font + ";\" >" +
-    message + "</font><br>";
+      message + "</font><br>";
   message = "[" + QTime::currentTime().toString() + "] " + message;
   ui->consoleTextEdit->append(message);
   ui->consoleTextEdit->verticalScrollBar()->setValue(ui->consoleTextEdit->verticalScrollBar()->maximum());
 }
 
 void MainWindow::information(QString text) {
-  this->message("INFO: " + text, "");
+  statusBar()->setStyleSheet("color: blue");
+  this->message("INFO: " + text, "blue");
 }
 
 void MainWindow::warning(QString text) {
-  this->message("WARNING: " + text, "blue");
+  statusBar()->setStyleSheet("color: orange");
+  this->message("WARNING: " + text, "orange");
 }
 
 void MainWindow::error(QString text) {
+  statusBar()->setStyleSheet("color: red");
   this->message("ERROR: " + text, "red");
 }
 
-void MainWindow::updateViewerBBox()
+void MainWindow::updateViewerBBox(bool recenter = true)
 {
   const Scene::Bbox bbox = scene->bbox();
+#if QGLVIEWER_VERSION >= 0x020502
+    qglviewer::Vec center = viewer->camera()->pivotPoint();
+#else
+    qglviewer::Vec center = viewer->camera()->revolveAroundPoint();
+#endif
   const double xmin = bbox.xmin();
   const double ymin = bbox.ymin();
   const double zmin = bbox.zmin();
@@ -848,7 +858,18 @@ void MainWindow::updateViewerBBox()
 
   viewer->setSceneBoundingBox(vec_min,
                               vec_max);
-  viewer->camera()->showEntireScene();
+  if(recenter)
+  {
+    viewer->camera()->showEntireScene();
+  }
+  else
+  {
+#if QGLVIEWER_VERSION >= 0x020502
+    viewer->camera()->setPivotPoint(center);
+#else
+    viewer->camera()->setRevolveAroundPoint(center);
+#endif
+  }
 }
 
 void MainWindow::reloadItem() {
@@ -887,8 +908,8 @@ void MainWindow::reloadItem() {
   Scene_item_with_properties *property_item = dynamic_cast<Scene_item_with_properties*>(new_item);
   if(property_item)
     property_item->copyProperties(item);
-  new_item->invalidateOpenGLBuffers();
   scene->replaceItem(scene->item_id(item), new_item, true);
+  new_item->invalidateOpenGLBuffers();
   item->deleteLater();
 }
 
@@ -1006,7 +1027,8 @@ void MainWindow::open(QString filename)
     default:
       load_pair = File_loader_dialog::getItem(fileinfo.fileName(), selected_items, &ok);
   }
-  viewer->context()->makeCurrent();
+
+  viewer->makeCurrent();
   if(!ok || load_pair.first.isEmpty()) { return; }
   
   if (load_pair.second)
@@ -1022,9 +1044,9 @@ void MainWindow::open(QString filename)
   settings.setValue("OFF open directory",
                     fileinfo.absoluteDir().absolutePath());
   CGAL::Three::Scene_item* scene_item = loadItem(fileinfo, findLoader(load_pair.first));
-  if(scene_item != 0) {
-    this->addToRecentFiles(fileinfo.absoluteFilePath());
-  }
+  if(!scene_item)
+    return;
+  this->addToRecentFiles(fileinfo.absoluteFilePath());
 
   selectSceneItem(scene->addItem(scene_item));
 
@@ -1459,6 +1481,7 @@ void MainWindow::on_actionLoad_triggered()
   dialog.setFileMode(QFileDialog::ExistingFiles);
 
   if(dialog.exec() != QDialog::Accepted) { return; }
+  viewer->update();
   FilterPluginMap::iterator it = 
     filterPluginMap.find(dialog.selectedNameFilter());
   
@@ -1489,8 +1512,10 @@ void MainWindow::on_actionLoad_triggered()
         scene->redraw_model();
       this->addToRecentFiles(filename);
     } else {
+      int scene_size = scene->numberOfEntries();
       open(filename);
-      scene->item(scene->numberOfEntries()-1)->setColor(colors_[++nb_item]);
+      if(scene->numberOfEntries() != scene_size)
+        scene->item(scene->numberOfEntries()-1)->setColor(colors_[++nb_item]);
     }
   }
 }
@@ -1534,13 +1559,19 @@ void MainWindow::on_actionSaveAs_triggered()
     return;
   }
   QString caption = tr("Save %1 to File...%2").arg(item->name()).arg(ext);
+  //remove `)`
+  ext.chop(1);
+  //remove `(*.`
+  ext = ext.right(ext.size()-3);
   QString filename = 
     QFileDialog::getSaveFileName(this,
                                  caption,
-                                 QString(),
+                                 QString("%1.%2").arg(item->name()).arg(ext),
                                  filters.join(";;"));
   if(filename.isEmpty())
     return;
+
+  viewer->update();
   save(filename, item);
 }
 
@@ -1766,8 +1797,6 @@ void MainWindow::recurseExpand(QModelIndex index)
     {
         recurseExpand(index.child(0,0));
     }
-
-    QString name = scene->item(scene->getIdFromModelIndex(index))->name();
         CGAL::Three::Scene_group_item* group =
                 qobject_cast<CGAL::Three::Scene_group_item*>(scene->item(scene->getIdFromModelIndex(index)));
         if(group && group->isExpanded())
@@ -1827,6 +1856,8 @@ void MainWindow::statisticsOnItem()
             statistics_dlg, SLOT(accept()));
     connect(statistics_ui->updateButton, SIGNAL(clicked()),
             this, SLOT(statisticsOnItem()));
+    connect(statistics_ui->exportButton, &QPushButton::clicked,
+            this, &MainWindow::exportStatistics);
   }
   statistics_ui->label_htmltab->setText(get_item_stats());
 
@@ -1926,10 +1957,10 @@ void MainWindow::on_actionMaxTextItemsDisplayed_triggered()
   bool valid;
   QString text = QInputDialog::getText(this, tr("Maximum Number of Text Items"),
                                        tr("Maximum Text Items Diplayed:"), QLineEdit::Normal,
-                                       QString("%1").arg(viewer->textRenderer->getMax_textItems()), &ok);
+                                       QString("%1").arg(viewer->textRenderer()->getMax_textItems()), &ok);
   text.toInt(&valid);
   if (ok && valid){
-    viewer->textRenderer->setMax(text.toInt());
+    viewer->textRenderer()->setMax(text.toInt());
     ui->actionMaxTextItemsDisplayed->setText(QString("Set Maximum Text Items Displayed : %1").arg(text.toInt()));
   }
 }
@@ -2003,4 +2034,54 @@ void MainWindow::set_facegraph_mode_adapter(bool is_polyhedron)
    set_face_graph_default_type(POLYHEDRON);
   else
     set_face_graph_default_type(SURFACE_MESH);
+}
+
+void MainWindow::exportStatistics()
+{
+  std::vector<Scene_item*> items;
+  Q_FOREACH(int id, getSelectedSceneItemIndices())
+  {
+    Scene_item* s_item = scene->item(id);
+    items.push_back(s_item);
+  }
+
+  QString str;
+  Q_FOREACH(Scene_item* sit, items)
+  {
+    CGAL::Three::Scene_item::Header_data data = sit->header();
+    if(data.titles.size()>0)
+    {
+      int titles_limit =0;
+      int title = 0;
+      str.append(QString("%1: \n").arg(sit->name()));
+      for(int j=0; j<data.categories.size(); j++)
+      {
+        str.append(QString("  %1: \n")
+                   .arg(data.categories[j].first));
+        titles_limit+=data.categories[j].second;
+        for(;title<titles_limit; ++title)
+        {
+          str.append(QString("    %1: ").arg(data.titles.at(title)));
+          str.append(QString("%1\n").arg(sit->computeStats(title)));
+        }
+      }
+    }
+  }
+
+  QString filename =
+      QFileDialog::getSaveFileName((QWidget*)sender(),
+                                   "",
+                                   QString("Statistics.txt"),
+                                   "Text Files (*.txt)");
+  if(filename.isEmpty())
+    return;
+  QFile output(filename);
+  output.open(QIODevice::WriteOnly | QIODevice::Text);
+
+  if(!output.isOpen()){
+    qDebug() << "- Error, unable to open" << "outputFilename" << "for output";
+  }
+  QTextStream outStream(&output);
+  outStream << str;
+  output.close();
 }

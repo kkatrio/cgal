@@ -2,8 +2,9 @@
 #define SCENE_POLYHEDRON_ITEM_H
 
 #include "Scene_polyhedron_item_config.h"
-#include  <CGAL/Three/Scene_item.h>
-#include  <CGAL/Three/TextRenderer.h>
+#include <CGAL/Three/Scene_print_item_interface.h>
+#include <CGAL/Three/Scene_item.h>
+#include <CGAL/Three/TextRenderer.h>
 #include "Polyhedron_type_fwd.h"
 #include "Polyhedron_type.h"
 #include <iostream>
@@ -23,7 +24,10 @@ struct Scene_polyhedron_item_priv;
 // This class represents a polyhedron in the OpenGL scene
 class SCENE_POLYHEDRON_ITEM_EXPORT Scene_polyhedron_item
         : public CGAL::Three::Scene_item,
-          public CGAL::Three::Scene_zoomable_item_interface{
+          public CGAL::Three::Scene_zoomable_item_interface,
+          public CGAL::Three::Scene_print_item_interface{
+    Q_INTERFACES(CGAL::Three::Scene_print_item_interface)
+    Q_PLUGIN_METADATA(IID "com.geometryfactory.PolyhedronDemo.PrintInterface/1.0")
     Q_OBJECT
     Q_INTERFACES(CGAL::Three::Scene_zoomable_item_interface)
     Q_PLUGIN_METADATA(IID "com.geometryfactory.PolyhedronDemo.ZoomInterface/1.0")
@@ -66,7 +70,6 @@ public:
     bool has_stats()const Q_DECL_OVERRIDE{return true;}
     QString computeStats(int type)Q_DECL_OVERRIDE;
     CGAL::Three::Scene_item::Header_data header() const Q_DECL_OVERRIDE;
-    TextListItem* textItems;
     Scene_polyhedron_item();
     //   Scene_polyhedron_item(const Scene_polyhedron_item&);
     Scene_polyhedron_item(const Polyhedron& p);
@@ -126,9 +129,14 @@ public:
     //! @returns `true` if the item has multiple colors at the same time.
     bool isItemMulticolor();
 
-    void printPrimitiveId(QPoint point, CGAL::Three::Viewer_interface*viewer) Q_DECL_OVERRIDE;
-    void printPrimitiveIds(CGAL::Three::Viewer_interface*viewer) const Q_DECL_OVERRIDE;
-    bool testDisplayId(double x, double y, double z, CGAL::Three::Viewer_interface*) Q_DECL_OVERRIDE;
+    void printPrimitiveId(QPoint point, CGAL::Three::Viewer_interface*viewer)Q_DECL_OVERRIDE;
+    bool printVertexIds(CGAL::Three::Viewer_interface*)const Q_DECL_OVERRIDE;
+    bool printEdgeIds(CGAL::Three::Viewer_interface*)const Q_DECL_OVERRIDE;
+    bool printFaceIds(CGAL::Three::Viewer_interface*)const Q_DECL_OVERRIDE;
+    void printAllIds(CGAL::Three::Viewer_interface*) Q_DECL_OVERRIDE;
+    bool shouldDisplayIds(CGAL::Three::Scene_item *current_item) const Q_DECL_OVERRIDE;
+    bool testDisplayId(double x, double y, double z, CGAL::Three::Viewer_interface*)const Q_DECL_OVERRIDE;
+
 
     //! @returns `true` if `f` is the first facet intersected by a raytracing
     bool intersect_face(double orig_x,
@@ -160,6 +168,12 @@ public Q_SLOTS:
     void update_halfedge_indices();
     void invalidate_aabb_tree();
     void itemAboutToBeDestroyed(Scene_item *) Q_DECL_OVERRIDE;
+    void resetColors();
+    void showVertices(bool);
+    void showEdges(bool);
+    void showFaces(bool);
+    void showPrimitives(bool);
+    void zoomToId();
 
 Q_SIGNALS:
     void selection_done();

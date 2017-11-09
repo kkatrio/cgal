@@ -28,6 +28,9 @@ import glob
 import re
 import operator
 import datetime
+import getpass
+import socket
+import time
 from xml.dom.minidom import parseString
 from pyquery import PyQuery as pq
 
@@ -86,12 +89,12 @@ body  {color: black; background-color: #C0C0D0; font-family: sans-serif;}
     if args.publish and args.do_copy_results:
       suffix=''
       if args.doxygen_version:
-        suffix = "built with Doxygen "+args.doxygen_version
-      link="\nLink to this <a href=output/Manual/index.html>documentation {_suffix}</a>\n".format(_suffix=suffix)
+        suffix = ""+args.doxygen_version
+      link="<a href=\"output/Manual/index.html\">Documentation built</a> with <a href=\"https://github.com/CGAL/doxygen\">our fork of Doxygen {_suffix}</a>\n".format(_suffix=suffix)
       suffix = ''
       if args.master_describe:
         suffix=args.master_describe
-      link_master="\n<br>Link to <a href=master/Manual/index.html> documentation built with Doxygen Master {_suffix}</a>\n".format(_suffix=suffix)
+      link_master="\n<br><a href=\"master/Manual/index.html\">Documentation built</a> with <a href=\"https://github.com/doxygen/doxygen\">the master version of Doxygen {_suffix}</a> (buggy), so that we see progress/regression of doxygen development as far as CGAL is concerned.\n".format(_suffix=suffix)
       d = pq(page_header+link+"   "+link_master+page_footer)
     else:
       d = pq(page_header+page_footer)
@@ -185,14 +188,19 @@ body  {color: black; background-color: #C0C0D0; font-family: sans-serif;}
 <html><head><title>Manual Testsuite Overview</title></head>
 <body><h1>Overviewpage of the Doxygen Manual Testsuite</h1>
 <table  border="1" cellspacing="2" cellpadding="5" id="revisions" class="rev-table">
-<tr><th>Revision</th><th>Date</th><th>Warnings</th><th>Errors</th><th>Diff with doxygen master</th></tr></table></body></html>''')
-
+<tr><th>Revision</th><th>Date</th><th>Warnings</th><th>Errors</th><th>Diff with doxygen master</th></tr></table></body>''')
+                args_list=''
+                for arg in sys.argv[0:]:
+                  args_list+=arg+' '
+                signature='<p id="suffix"> Generated with the command line <br /> <code> python {script_args} <br /> by {user_name}@{host_name} at {date_time} </code></p></html>'.format(
+                  user_name=getpass.getuser(), host_name=socket.gethostname(), date_time=time.ctime(), script_args=args_list)
+                f.write(signature)
         with open(diff_file, 'r') as myfile:
           diff=myfile.read()
         if not diff:
           diff='none'
         else:
-          diff='<a href="{log_path}/diff.txt">Diff between {test_version} and {master version}.</a>'.format(
+          diff='<a href="{log_path}/diff.txt">Diff between {test_version} and {master_version}.</a>'.format(
           log_path=version_string, test_version=args.doxygen_version, master_version=args.master_describe)
         d=pq(filename=publish_dir + 'index.html',parser="html")
         revs=d('#revisions tr')
@@ -208,6 +216,16 @@ body  {color: black; background-color: #C0C0D0; font-family: sans-serif;}
             else:
                 sys.stderr.write("Warning: the directory " + publish_dir + dir_to_remove + " does not exist or is not writable!\n")
             revs.eq(k).remove()
+        script_info=d('#suffix')
+        if script_info.text()!='':
+             print("Found")
+             script_info.remove()
+        args_list=''
+        for arg in sys.argv[0:]:
+          args_list+=arg+' '
+        signature='<html><p id="suffix"> Generated with the command line<br /> <code> python {script_args}<br /> by {user_name}@{host_name} at {date_time} </code></p></html>'.format(
+          user_name=getpass.getuser(), host_name=socket.gethostname(), date_time=time.ctime(), script_args=args_list)
+        d('table').after(signature)
         write_out_html(d, publish_dir + 'index.html')
         try:
           #copy log files

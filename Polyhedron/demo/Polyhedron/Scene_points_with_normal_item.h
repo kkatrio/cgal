@@ -4,14 +4,17 @@
 #include <CGAL/Three/Scene_item_with_properties.h>
 #include <CGAL/Three/Scene_zoomable_item_interface.h>
 #include "Scene_points_with_normal_item_config.h"
+#include <CGAL/Surface_mesh/Surface_mesh_fwd.h>
 #include "Polyhedron_type_fwd.h"
 #include "Kernel_type.h"
 #include "Point_set_3.h"
 #include <iostream>
+#include <CGAL/config.h>
 
 struct Scene_points_with_normal_item_priv;
 // point set
 typedef Point_set_3<Kernel> Point_set;
+typedef CGAL::Surface_mesh<Kernel::Point_3> SMesh;
 
 class QMenu;
 class QAction;
@@ -29,7 +32,10 @@ class SCENE_POINTS_WITH_NORMAL_ITEM_EXPORT Scene_points_with_normal_item
 public:
   Scene_points_with_normal_item();
   Scene_points_with_normal_item(const Scene_points_with_normal_item& toCopy);
-  Scene_points_with_normal_item(const Polyhedron& p);
+
+  Scene_points_with_normal_item(const SMesh& input_mesh);
+  Scene_points_with_normal_item(const Polyhedron& input_mesh);
+
   ~Scene_points_with_normal_item();
   Scene_points_with_normal_item* clone() const Q_DECL_OVERRIDE;
 
@@ -40,8 +46,14 @@ public:
   QMenu* contextMenu() Q_DECL_OVERRIDE;
 
   // IO
+#if !defined(CGAL_CFG_NO_CPP0X_RVALUE_REFERENCE) && !defined(CGAL_CFG_NO_CPP0X_VARIADIC_TEMPLATES)
+#ifdef CGAL_LINKED_WITH_LASLIB
+  bool read_las_point_set(std::istream& in);
+  bool write_las_point_set(std::ostream& out) const;
+#endif // LAS
   bool read_ply_point_set(std::istream& in);
-  bool write_ply_point_set(std::ostream& out) const;
+  bool write_ply_point_set(std::ostream& out, bool binary) const;
+#endif // CXX11
   bool read_off_point_set(std::istream& in);
   bool write_off_point_set(std::ostream& out) const;
   bool read_xyz_point_set(std::istream& in);
@@ -63,6 +75,10 @@ public:
   // Gets wrapped point set
   Point_set*       point_set();
   const Point_set* point_set() const;
+
+  // Gets PLY comments (empty if point set not originated from PLY input)
+  std::string& comments();
+  const std::string& comments() const;
 
   // Gets dimensions
   virtual bool isFinite() const Q_DECL_OVERRIDE { return true; }
@@ -95,7 +111,9 @@ public Q_SLOTS:
   //Set the status of the slider as `released`
   void pointSliderReleased();
   void itemAboutToBeDestroyed(Scene_item *) Q_DECL_OVERRIDE;
-
+  void setPointSize(int size);
+  void setNormalSize(int size);
+  void resetColors();
 // Data
 protected:
   friend struct Scene_points_with_normal_item_priv;

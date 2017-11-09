@@ -23,8 +23,10 @@
 #include <CGAL/assertions.h>
 #include <CGAL/boost/graph/properties.h>
 #include <boost/graph/graph_traits.hpp>
+#include <CGAL/boost/graph/iterator.h>
 #include <boost/iterator/transform_iterator.hpp>
 
+#include <CGAL/boost/graph/Graph_with_descriptor_with_graph_fwd.h>
 
 namespace CGAL
 {
@@ -108,7 +110,7 @@ std::ostream& operator<<(std::ostream& os, const Gwdwg_descriptor<Graph,Descript
 }
 
 /*!
-\ingroup PkgBGLHelper
+\ingroup PkgBGLAdaptors
 
 The class `Graph_with_descriptor_with_graph` wraps a graph into another graph in such a way that its descriptors contain a reference to the graph they come from.
 
@@ -150,7 +152,7 @@ struct Graph_with_descriptor_with_graph
 
 
 template <typename Graph, typename Graph_descriptor, typename Descriptor>
-struct Descriptor2Descriptor: public std::unary_function<Graph_descriptor,Descriptor>
+struct Descriptor2Descriptor: public CGAL::unary_function<Graph_descriptor,Descriptor>
 {
 
   Descriptor2Descriptor()
@@ -325,8 +327,7 @@ edge(typename boost::graph_traits<Graph_with_descriptor_with_graph<Graph> >::ver
 
 
 template <class Graph>
-std::pair<typename boost::graph_traits<Graph_with_descriptor_with_graph<Graph> >::vertex_iterator,
-          typename boost::graph_traits<Graph_with_descriptor_with_graph<Graph> >::vertex_iterator>
+CGAL::Iterator_range<typename boost::graph_traits<Graph_with_descriptor_with_graph<Graph> >::vertex_iterator>
 vertices(const Graph_with_descriptor_with_graph<Graph> & w)
 {
   typename boost::graph_traits<Graph>::vertex_iterator b,e;
@@ -336,8 +337,7 @@ vertices(const Graph_with_descriptor_with_graph<Graph> & w)
 }
 
 template <class Graph>
-std::pair<typename boost::graph_traits<Graph_with_descriptor_with_graph<Graph> >::edge_iterator,
-          typename boost::graph_traits<Graph_with_descriptor_with_graph<Graph> >::edge_iterator>
+CGAL::Iterator_range<typename boost::graph_traits<Graph_with_descriptor_with_graph<Graph> >::edge_iterator>
 edges(const Graph_with_descriptor_with_graph<Graph> & w)
 {
   typename boost::graph_traits<Graph>::edge_iterator b,e;
@@ -347,8 +347,7 @@ edges(const Graph_with_descriptor_with_graph<Graph> & w)
 }
 
 template <class Graph>
-std::pair<typename boost::graph_traits<Graph_with_descriptor_with_graph<Graph> >::out_edge_iterator,
-          typename boost::graph_traits<Graph_with_descriptor_with_graph<Graph> >::out_edge_iterator>
+CGAL::Iterator_range<typename boost::graph_traits<Graph_with_descriptor_with_graph<Graph> >::out_edge_iterator>
 out_edges(typename boost::graph_traits<Graph_with_descriptor_with_graph<Graph> >::vertex_descriptor v,
           const Graph_with_descriptor_with_graph<Graph> & w)
 {
@@ -360,8 +359,7 @@ out_edges(typename boost::graph_traits<Graph_with_descriptor_with_graph<Graph> >
 }
 
 template <class Graph>
-std::pair<typename boost::graph_traits<Graph_with_descriptor_with_graph<Graph> >::in_edge_iterator,
-          typename boost::graph_traits<Graph_with_descriptor_with_graph<Graph> >::in_edge_iterator>
+CGAL::Iterator_range<typename boost::graph_traits<Graph_with_descriptor_with_graph<Graph> >::in_edge_iterator>
 in_edges(typename boost::graph_traits<Graph_with_descriptor_with_graph<Graph> >::vertex_descriptor v,
          const Graph_with_descriptor_with_graph<Graph> & w)
 {
@@ -630,8 +628,7 @@ prev(typename boost::graph_traits< Graph_with_descriptor_with_graph<Graph> >::ha
 //
 
 template <class Graph>
-std::pair<typename boost::graph_traits<Graph_with_descriptor_with_graph<Graph> >::halfedge_iterator,
-          typename boost::graph_traits<Graph_with_descriptor_with_graph<Graph> >::halfedge_iterator>
+CGAL::Iterator_range<typename boost::graph_traits<Graph_with_descriptor_with_graph<Graph> >::halfedge_iterator>
 halfedges(const Graph_with_descriptor_with_graph<Graph> & w)
 {
   typename boost::graph_traits<Graph>::halfedge_iterator b,e;
@@ -671,8 +668,7 @@ halfedge(typename boost::graph_traits< Graph_with_descriptor_with_graph<Graph> >
 
 
 template <class Graph>
-std::pair<typename boost::graph_traits<Graph_with_descriptor_with_graph<Graph> >::face_iterator,
-          typename boost::graph_traits<Graph_with_descriptor_with_graph<Graph> >::face_iterator>
+CGAL::Iterator_range<typename boost::graph_traits<Graph_with_descriptor_with_graph<Graph> >::face_iterator>
 faces(const Graph_with_descriptor_with_graph<Graph> & w)
 {
   typename boost::graph_traits<Graph>::face_iterator b,e;
@@ -699,7 +695,7 @@ is_valid(const Graph_with_descriptor_with_graph<Graph> & w, bool verbose = false
 
 
 /*!
-  \ingroup PkgBGLHelper
+  \ingroup PkgBGLAdaptors
     `Graph_with_descriptor_with_graph_property_map` enables to forward properties from a
      `Graph` to a `Graph_with_descriptor_with_graph`.
     \cgalModels `Graph_with_descriptor_with_graph_property_map` the same property map concept as `PM`
@@ -707,16 +703,63 @@ is_valid(const Graph_with_descriptor_with_graph<Graph> & w, bool verbose = false
     @tparam PM a property_map of a `Graph`.
 
 */
-template <typename Graph, typename PM>
+template <typename Graph, typename PM, typename Category =
+          typename boost::property_traits<PM>::category>
 struct Graph_with_descriptor_with_graph_property_map {
 
-  typedef typename boost::property_traits<PM>::category category;
+  typedef Category category;
   typedef typename boost::property_traits<PM>::value_type value_type;
   typedef typename boost::property_traits<PM>::reference reference;
   typedef Gwdwg_descriptor<Graph, typename boost::property_traits<PM>::key_type > key_type;
 
   Graph* graph;
   PM pm;
+
+  Graph_with_descriptor_with_graph_property_map()
+    : graph(NULL)
+  {}
+
+  Graph_with_descriptor_with_graph_property_map(const Graph& graph, const PM& pm)
+    : graph(const_cast<Graph*>(&graph)), pm(pm)
+  {}
+
+  template <typename Descriptor>
+  friend
+  reference
+  get(const Graph_with_descriptor_with_graph_property_map<Graph,PM>& gpm, const Descriptor& d)
+  {
+    CGAL_assertion(gpm.graph!=NULL);
+    CGAL_assertion(d.graph == gpm.graph);
+    return get(gpm.pm, d.descriptor);
+  }
+
+  template <typename Descriptor>
+  friend
+  void
+  put(const Graph_with_descriptor_with_graph_property_map<Graph,PM>& gpm, const Descriptor& d,   const value_type& v)
+  {
+    CGAL_assertion(gpm.graph!=NULL);
+    CGAL_assertion(d.graph == gpm.graph);
+    put(gpm.pm, d.descriptor, v);
+  }
+}; // class Graph_with_descriptor_with_graph_property_map
+
+//specialisation for lvaluepropertymaps
+template <typename Graph, typename PM>
+struct Graph_with_descriptor_with_graph_property_map<Graph, PM, boost::lvalue_property_map_tag> {
+
+  typedef boost::lvalue_property_map_tag category;
+  typedef typename boost::property_traits<PM>::value_type value_type;
+  typedef typename boost::property_traits<PM>::reference reference;
+  typedef Gwdwg_descriptor<Graph, typename boost::property_traits<PM>::key_type > key_type;
+
+  Graph* graph;
+  PM pm;
+
+  value_type& operator[](key_type& k) const
+  {
+      return get(*this, k);
+  }
 
   Graph_with_descriptor_with_graph_property_map()
     : graph(NULL)

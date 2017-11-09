@@ -38,59 +38,6 @@ namespace CGAL {
 
 namespace Mesh_3 {
 
-BOOST_MPL_HAS_XXX_TRAIT_DEF(Has_manifold_criterion)
-
-template <typename Criteria,
-          bool has_Has_manifold_criterion =
-          has_Has_manifold_criterion<Criteria>::value>
-struct Has_manifold_criterion :
-    public CGAL::Boolean_tag<Criteria::Has_manifold_criterion::value>
-// when Criteria has the nested type Has_manifold_criterion
-{};
-
-template <typename Criteria>
-struct Has_manifold_criterion<Criteria, false> : public CGAL::Tag_false
-// when Criteria does not have the nested type Has_manifold_criterion
-{};
-
-
-
-template <typename Criteria>
-bool get_with_manifold(const Criteria&, CGAL::Tag_false)
-{
-  return false;
-}
-
-template <typename Criteria>
-bool get_with_manifold(const Criteria& c, CGAL::Tag_true)
-{
-  return (c.topology() & MANIFOLD_WITH_BOUNDARY) != 0;
-}
-
-template <typename Criteria>
-bool get_with_manifold(const Criteria& c)
-{
-  return get_with_manifold(c, Has_manifold_criterion<Criteria>());
-}
-
-template <typename Criteria>
-bool get_with_boundary(const Criteria&, CGAL::Tag_false)
-{
-  return false;
-}
-
-template <typename Criteria>
-bool get_with_boundary(const Criteria& c, CGAL::Tag_true)
-{
-  return (c.topology() & NO_BOUNDARY) == 0;
-}
-
-template <typename Criteria>
-bool get_with_boundary(const Criteria& c)
-{
-  return get_with_boundary(c, Has_manifold_criterion<Criteria>());
-}
-
 template<class Tr,
          class Criteria,
          class MeshDomain,
@@ -116,7 +63,8 @@ class Refine_facets_manifold_base
 public:
   typedef Complex3InTriangulation3 C3t3;
   typedef MeshDomain Mesh_domain;
-  typedef typename Tr::Point Point;
+  typedef typename Tr::Weighted_point Weighted_point;
+  typedef typename Tr::Bare_point Bare_point;
   typedef typename Tr::Facet Facet;
   typedef typename Tr::Vertex_handle Vertex_handle;
 
@@ -125,6 +73,7 @@ public:
 protected:
   typedef typename Tr::Geom_traits GT;
   typedef typename GT::FT FT;
+  typedef typename GT::Construct_point_3 Construct_point_3;
   typedef typename Tr::Edge Edge;
   typedef typename Tr::Cell_handle Cell_handle;
 
@@ -179,13 +128,14 @@ private:
 
   FT compute_sq_distance_to_facet_center(const Facet& f,
                                          const Vertex_handle v) const {
-    const Point& fcenter = f.first->get_facet_surface_center(f.second);
-    const Point& vpoint = v->point();
+    Construct_point_3 wp2p = this->r_tr_.geom_traits().construct_point_3_object();
+    const Bare_point& fcenter = f.first->get_facet_surface_center(f.second);
+    const Bare_point& vpoint = wp2p(v->point());
 
     return
-      this->r_tr_.geom_traits().compute_squared_distance_3_object()
-      (fcenter.point(), vpoint.point())
-      - vpoint.weight();
+      this->r_tr_.geom_traits().compute_squared_distance_3_object()(fcenter,
+                                                                    vpoint)
+      - v->point().weight();
   }
 
   Facet
@@ -351,15 +301,18 @@ public:
   Refine_facets_manifold_base(Tr& triangulation,
                               C3t3& c3t3,
                               const Mesh_domain& oracle,
-                              const Criteria& criteria)
+                              const Criteria& criteria,
+                              int mesh_topology,
+                              std::size_t maximal_number_of_vertices)
     : Base(triangulation,
            c3t3,
            oracle,
-           criteria)
+           criteria,
+           maximal_number_of_vertices)
     , m_manifold_info_initialized(false)
     , m_bad_vertices_initialized(false)
-    , m_with_manifold_criterion(get_with_manifold(criteria))
-    , m_with_boundary(get_with_boundary(criteria))
+    , m_with_manifold_criterion((mesh_topology & MANIFOLD_WITH_BOUNDARY) != 0)
+    , m_with_boundary((mesh_topology & NO_BOUNDARY) == 0)
   {
 #ifdef CGAL_MESH_3_DEBUG_CONSTRUCTORS
     std::cerr << "CONS: Refine_facets_manifold_base";
@@ -480,6 +433,13 @@ public:
     {
       if(!m_with_manifold_criterion) return true;
 
+      if(this->m_maximal_number_of_vertices_ !=0 &&
+         this->r_tr_.number_of_vertices() >=
+         this->m_maximal_number_of_vertices_)
+      {
+        return true;
+      }
+
       // Note: with Parallel_tag, `m_bad_vertices` and `m_bad_edges`
       // are always empty.
       return m_bad_edges.left.empty() && m_bad_vertices.empty();
@@ -532,7 +492,7 @@ public:
     } //end Sequential
   }
 
-  void before_insertion_impl(const Facet& f, const Point& s,
+  void before_insertion_impl(const Facet& f, const Weighted_point& s,
                              Zone& zone) {
     if( m_manifold_info_initialized )
     {

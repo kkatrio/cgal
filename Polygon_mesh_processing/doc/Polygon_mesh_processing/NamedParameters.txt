@@ -144,13 +144,41 @@ algorithm.\n
 \cgalNPEnd
 
 \cgalNPBegin{ edge_is_constrained_map } \anchor PMP_edge_is_constrained_map
-the property map containing information about edges of the input polygon mesh being constrained or not.\n
+the property map containing information about edges of the input polygon mesh being marked or not.\n
+In `CGAL::Polygon_mesh_processing::isotropic_remeshing()` and `CGAL::Polygon_mesh_processing::connected_components()`,
+the marked edges are constrained.\n
 \b Type : a class model of `ReadWritePropertyMap` with
 `boost::graph_traits<PolygonMesh>::%edge_descriptor` as key type and
 `bool` as value type. It should be default constructible.\n
 \b Default : if this parameter is omitted,
 a default property map where no edge is constrained is provided.
 \cgalNPEnd
+
+\cgalNPBegin{ vertex_incident_patches_map } \anchor PMP_vertex_incident_patches_map
+the property map containing the surface patches incident to each vertex of the input polygon mesh.\n
+\b Type : a class model of `LvaluePropertyMap` with
+`boost::graph_traits<PolygonMesh>::%vertex_descriptor` as key type. Its value type
+must be a container of `boost::property_traits<PatchIdMap>::%value_type` and have a function `insert()`.
+A `std::set` or a `boost::unordered_set` are recommended, as a patch index may be
+inserted several times.\n
+\b Default value is \code boost::get(CGAL::vertex_incident_patches_t, pmesh)\endcode
+\cgalNPEnd
+
+\cgalNPBegin{ first_index } \anchor PMP_first_index
+The index of the first surface patch.\n
+\b Type : `std::size_t`\n
+\b Default : 1
+\cgalNPEnd
+
+\cgalNPBegin{ vertex_feature_degree_map } \anchor PMP_vertex_feature_degree_map
+the property map containing the number of feature edges being incident to the vertices of the polygon mesh `pmesh`.\n
+\b Type : a class model of `ReadWritePropertyMap` with
+`boost::graph_traits<PolygonMesh>::%vertex_descriptor` as key type and
+`int` as value type. It should be default constructible.\n
+\b Default value is \code boost::get(CGAL::vertex_feature_degree_t(), pmesh)\endcode
+\cgalNPEnd
+
+
 
 \cgalNPBegin{ vertex_is_constrained_map } \anchor PMP_vertex_is_constrained_map
 the property map containing information about vertices of the input polygon mesh being constrained or not.
@@ -337,32 +365,6 @@ and perturbation is not deterministic
 \n
 \b Type : `unsigned int` \n
 \b Default is that this variable is not set
-\cgalNPEnd
-
-\cgalNPBegin{use_weights} \anchor PMP_use_weights
-Parameter used in `angle_remeshing()` to set whether angles should carry weights while remeshing
-so that small angles carry more weight.
-\n
-\b Type : `bool` \n
-\b Default is `false`
-\cgalNPEnd
-
-\cgalNPBegin{gradient_descent_precision} \anchor PMP_gradient_descent_precision
-Parameter used in `area_remeshing()` to set precision to be met while the relative energy
-between iterations of each triagle is minimized. Triangle energy is defined based on its area compared to the
-average area of all triagnles adjacent to the vertex that is being moved.
-\n
-\b Type : `double` \n
-\b Default is `0.001`
-\cgalNPEnd
-
-\cgalNPBegin{distance_precision} \anchor PMP_distance_precision
-Parameter used in `compatible_remeshing()` to set precision for the Hausdorff distance
-of the mesh between the previous and the current iteration that has to be achieved for a mesh to converge
-during smoothing.
-\n
-\b Type : `double` \n
-\b Default is `0.01`
 \cgalNPEnd
 
 \cgalNPTableEnd

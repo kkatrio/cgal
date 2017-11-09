@@ -1,15 +1,7 @@
-#! /bin/bash
+# This CMake script is a translation of the bash script `./cgal_test_base`
+# to the CMake language. It defines the targets to compile, as well as the
+# tests to run with CTest.
 
-# This is a script for the CGAL test suite. Such a script must obey
-# the following rules:
-#
-# - the name of the script is cgal_test
-# - for every target two one line messages are written to the file 'error.txt'
-#     the first one indicates if the compilation was successful
-#     the second one indicates if the execution was successful
-#   if one of the two was not successful, the line should start with 'ERROR:'
-# - running the script should not require any user interaction
-# - the script should clean up object files and executables
 
 # SET PARAMETERS FOR cgal_test
 
@@ -164,9 +156,18 @@ function(cgal_arr_2_add_target exe_name source_file)
   target_compile_options(${name} PRIVATE ${flags})
   cgal_debug_message(STATUS "#      -> target ${name} with TESTSUITE_CXXFLAGS: ${flags}")
 
+  add_test(NAME "compilation_of__${name}"
+    COMMAND ${TIME_COMMAND} "${CMAKE_COMMAND}" --build "${CMAKE_BINARY_DIR}" --target "${name}")
+  set_property(TEST "compilation_of__${name}"
+    APPEND PROPERTY LABELS "${PROJECT_NAME}")
+
   # Add a compatibility-mode with the shell script `cgal_test_base`
   if(NOT TARGET ${exe_name})
     create_single_source_cgal_program( "${source_file}" NO_TESTING)
+    add_test(NAME "compilation_of__${exe_name}"
+      COMMAND ${TIME_COMMAND} "${CMAKE_COMMAND}" --build "${CMAKE_BINARY_DIR}" --target "${exe_name}")
+    set_property(TEST "compilation_of__${exe_name}"
+      APPEND PROPERTY LABELS "${PROJECT_NAME}")
   endif()
 endfunction()
 
@@ -193,6 +194,16 @@ function(run_test_alt name datafile)
   string(MAKE_C_IDENTIFIER "${name}  ${ARGV4}  ${ARGV5}" test_name)
   add_test(NAME ${test_name} COMMAND ${command}
     WORKING_DIRECTORY ${CGAL_CURRENT_SOURCE_DIR})
+  set_property(TEST "${test_name}"
+    APPEND PROPERTY DEPENDS "compilation_of__${name}")
+  if(POLICY CMP0066) # CMake 3.7 or later
+    set_tests_properties("${test_name}"
+      PROPERTIES
+      WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/__exec_test_dir
+      FIXTURES_REQUIRED ${PROJECT_NAME})
+  endif()
+  cgal_debug_message(STATUS "#       .. depends on compilation_of__${name}")
+
 #  message("   successful execution of ${name}  ${ARGV4} ${ARGV5}")
   set_property(TEST "${test_name}"
     APPEND PROPERTY LABELS "${PROJECT_NAME}")
@@ -873,6 +884,10 @@ endfunction()
 #---------------------------------------------------------------------#
 function(test_polycurve_conic_traits)
 #  echo polycurve test starting
+  if($ENV{CGAL_DISABLE_GMP})
+    MESSAGE(STATUS "test_polycurve_conic_traits requires CORE and will not be executed")
+    return()
+  endif()
   set(nt ${CORE_EXPR_NT})
   set(kernel ${CARTESIAN_KERNEL})
   set(geom_traits ${POLYCURVE_CONIC_GEOM_TRAITS})
@@ -940,6 +955,10 @@ endfunction()
 # polycurve bezier traits
 #---------------------------------------------------------------------#
 function(test_polycurve_bezier_traits)
+  if($ENV{CGAL_DISABLE_GMP})
+    MESSAGE(STATUS "test_polycurve_bezier_traits requires CORE and will not be executed")
+    return()
+  endif()
   set(nt ${CORE_EXPR_NT})
   set(kernel ${CARTESIAN_KERNEL})
   set(geom_traits ${POLYCURVE_BEZIER_GEOM_TRAITS})
@@ -1045,6 +1064,10 @@ endfunction()
 # conic traits
 #---------------------------------------------------------------------#
 function(test_conic_traits)
+  if($ENV{CGAL_DISABLE_GMP})
+    MESSAGE(STATUS "test_conic_traits requires CORE and will not be executed")
+    return()
+  endif()
   set(nt ${CORE_EXPR_NT})
   set(kernel ${CARTESIAN_KERNEL})
   set(geom_traits ${CORE_CONIC_GEOM_TRAITS})
@@ -1172,6 +1195,10 @@ endfunction()
 # bezier traits
 #---------------------------------------------------------------------#
 function(test_bezier_traits)
+  if($ENV{CGAL_DISABLE_GMP})
+    MESSAGE(STATUS "test_bezier_traits requires CORE and will not be executed")
+    return()
+  endif()
   set(nt ${CORE_EXPR_NT})
   set(kernel ${CARTESIAN_KERNEL})
   set(geom_traits ${BEZIER_GEOM_TRAITS})
@@ -1215,6 +1242,10 @@ endfunction()
 # rational arc traits
 #---------------------------------------------------------------------#
 function(test_rational_arc_traits)
+  if($ENV{CGAL_DISABLE_GMP})
+    MESSAGE(STATUS "test_rational_arc_traits requires CORE and will not be executed")
+    return()
+  endif()
   set(nt ${CORE_INT_NT})
   set(kernel ${UNIVARIATE_ALGEBRAIC_KERNEL})
   set(geom_traits ${RATIONAL_ARC_GEOM_TRAITS})
@@ -1275,7 +1306,10 @@ endfunction()
 #---------------------------------------------------------------------#
 function(test_algebraic_traits_core)
   #TODO: Adapt
-
+  if($ENV{CGAL_DISABLE_GMP})
+    MESSAGE(STATUS "test_algebraic_traits_core requires CORE and will not be executed")
+    return()
+  endif()
   set(nt ${CORE_INT_NT})
   set(kernel ${UNIVARIATE_ALGEBRAIC_KERNEL})
   set(geom_traits ${ALGEBRAIC_GEOM_TRAITS})
