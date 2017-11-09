@@ -60,8 +60,9 @@ public:
 
         //connect(ui_widget.Apply_button,  SIGNAL(clicked()), this, SLOT(on_Apply_by_type_clicked()));
         connect(ui_widget.shape_smoothing_button,  SIGNAL(clicked()), this, SLOT(on_Apply_smoothing_clicked()));
-        connect(ui_widget.setup_system_button,  SIGNAL(clicked()), this, SLOT(on_Setup_system_clicked()));
+        //connect(ui_widget.setup_system_button,  SIGNAL(clicked()), this, SLOT(on_Setup_system_clicked()));
         //connect(ui_widget.Run_convergence_button,  SIGNAL(clicked()), this, SLOT(on_Run_convergence_clicked()));
+
 
     }
 
@@ -119,10 +120,6 @@ private:
         */
     }
 
-    void init_parameters()
-    {
-
-    }
 
 
 public Q_SLOTS:
@@ -136,22 +133,8 @@ public Q_SLOTS:
 
         if(poly_item)
         {
-            init_ui();
+          init_ui();
         }
-    }
-
-    void on_Setup_system_clicked()
-    {
-       const Scene_interface::Item_id index = scene->mainSelectionIndex();
-       Scene_polyhedron_item* poly_item = qobject_cast<Scene_polyhedron_item*>(scene->item(index));
-       Polyhedron& pmesh = *poly_item->polyhedron();
-
-       QApplication::setOverrideCursor(Qt::WaitCursor);
-
-       CGAL::Polygon_mesh_processing::setup_system(pmesh, stiffness_matrix);
-
-       QApplication::restoreOverrideCursor();
-
     }
 
 
@@ -161,11 +144,17 @@ public Q_SLOTS:
         Scene_polyhedron_item* poly_item = qobject_cast<Scene_polyhedron_item*>(scene->item(index));
         Polyhedron& pmesh = *poly_item->polyhedron();
 
-        QApplication::setOverrideCursor(Qt::WaitCursor);
-
         unsigned int nb_iter = ui_widget.smothing_spinBox->value();
         std::cout << "nb_iter= " << nb_iter << std::endl;
-        CGAL::Polygon_mesh_processing::smooth_shape(pmesh, nb_iter, stiffness_matrix);
+
+        QApplication::setOverrideCursor(Qt::WaitCursor);
+
+        if(!is_stiffness_matrix_setup)
+        {
+            CGAL::Polygon_mesh_processing::setup_mcf_system(pmesh, nb_iter, stiffness_matrix);
+            is_stiffness_matrix_setup = true;
+        }
+        CGAL::Polygon_mesh_processing::solve_mcf_system(pmesh, nb_iter, stiffness_matrix);
 
         poly_item->invalidateOpenGLBuffers();
         Q_EMIT poly_item->itemChanged();
@@ -207,10 +196,8 @@ private:
     QAction* actionSmoothing_;
     QDockWidget* dock_widget;
     Ui::Smoothing ui_widget;
-
-    typedef typename Eigen::SparseMatrix<double> Eigen_matrix;
-    Eigen_matrix stiffness_matrix;
-
+    Eigen::SparseMatrix<double> stiffness_matrix;
+    bool is_stiffness_matrix_setup;
 
 
 };

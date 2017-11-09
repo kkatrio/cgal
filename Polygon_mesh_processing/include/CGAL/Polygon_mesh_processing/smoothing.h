@@ -21,7 +21,10 @@ namespace CGAL {
 
 namespace Polygon_mesh_processing {
 
-
+std::ostream& nl(std::ostream& out)
+{
+  return out << "\n";
+}
 
 template<typename PolygonMesh, typename VertexPointMap,
          typename CotangentValue = CGAL::internal::Cotangent_value_Meyer<PolygonMesh, VertexPointMap>>
@@ -64,75 +67,8 @@ struct Cotangent_weight : CotangentValue
     }
 };
 
-template<typename PolygonMesh, typename VertexPointMap>
-class Cotangent_edge_weight
-{
-
-  typedef typename boost::graph_traits<PolygonMesh>::halfedge_descriptor   halfedge_descriptor;
-  typedef typename boost::graph_traits<PolygonMesh>::vertex_descriptor     vertex_descriptor;
-  typedef typename boost::graph_traits<PolygonMesh>::face_descriptor       face_descriptor;
-
-public:
-  Cotangent_edge_weight(PolygonMesh& mesh, VertexPointMap& vmap) : pmesh(mesh), vpmap(vmap) {}
-
-  double operator()(halfedge_descriptor h)
-  {
-
-    face_descriptor f = face(h, pmesh);
-    if(f == boost::graph_traits<PolygonMesh>::null_face())
-    {
-      return 0;
-    }
-    else
-    {
-      halfedge_descriptor hn = next(h, pmesh);
-      halfedge_descriptor hnn = next(hn, pmesh);
-
-      face_descriptor fn = face(hn, pmesh);
-      face_descriptor fnn = face(hnn, pmesh);
-
-      CGAL_assertion(f == fn);
-      CGAL_assertion(f == fnn);
-
-      double l1 = sqlength(hn);
-      double l2 = sqlength(hnn);
-      double l0 = sqlength(h);
-
-      double A = face_area(f, pmesh);
-
-      double cot = (l1 + l2 - l0) / (4 * A);
-
-      return cot;
-    }
-
-  }
 
 
-private:
-
-
-  double sqlength(const vertex_descriptor& v1,
-                  const vertex_descriptor& v2) const
-  {
-    return to_double(CGAL::squared_distance(get(vpmap, v1), get(vpmap, v2)));
-  }
-
-  double sqlength(const halfedge_descriptor& h) const
-  {
-    vertex_descriptor v1 = target(h, pmesh);
-    vertex_descriptor v2 = source(h, pmesh);
-    return sqlength(v1, v2);
-  }
-
-  // data
-  //std::unordered_map<halfedge_descriptor, double> cot_weights;
-  PolygonMesh pmesh;
-  VertexPointMap vpmap;
-
-
-
-
-};
 
 
 
@@ -187,8 +123,6 @@ private:
   // vertex index map
   typedef typename boost::property_map<PolygonMesh, boost::vertex_index_t>::type IndexMap;
 
-
-
   //CGAL Sparse solver
   typedef typename CGAL::Eigen_sparse_matrix<double>::EigenType CEigenMatrix;
 
@@ -197,8 +131,6 @@ private:
 
   typedef typename Solver_traits::Matrix Matrix;
   typedef typename Solver_traits::Vector Vector;
-
-
 
   // Eigen sparse matrix & vector
   typedef typename Eigen::SparseMatrix<double> Eigen_matrix;
@@ -217,9 +149,6 @@ private:
     Cotangent_weight<PolygonMesh, VertexPointMap> weight_calculator_;
     Incident_area<PolygonMesh> inc_areas_calculator_;
 
-    // alternative cot weights
-    Cotangent_edge_weight<PolygonMesh, VertexPointMap> weight_calculator2_;
-
     std::size_t nb_vert_;
 
     // linear solver
@@ -228,11 +157,82 @@ private:
     // constrained vertices
     std::unordered_set<vertex_descriptor> constrained_vertices_;
 
-    // stiffness matrix - TEMP
-    Eigen_matrix L_;
+
+public:
+
+  Shape_smoother(PolygonMesh& mesh, VertexPointMap& vpmap) : mesh_(mesh), vpmap_(vpmap),
+      weight_calculator_(mesh, vpmap),
+      inc_areas_calculator_(mesh),
+      nb_vert_(static_cast<int>(vertices(mesh).size()))
+  {  }
 
 
-// operations
+  Eigen_matrix calc_stiff_matrix()
+  {
+    Eigen_matrix L = stiff_matrix();
+    return L;
+  }
+
+
+  void solve_system(Eigen::SparseMatrix<double>& L)
+  {
+
+    //gather_constrained_vertices();
+
+    Matrix A(nb_vert_, nb_vert_);
+    Vector Bx(nb_vert_);
+    Vector By(nb_vert_);
+    Vector Bz(nb_vert_);
+    Vector Xx(nb_vert_);
+    Vector Xy(nb_vert_);
+    Vector Xz(nb_vert_);
+
+
+    compute_coeff_matrix(A, L);
+
+    //apply_constraints(A);
+
+
+    //extract_matrix(A);
+
+
+    compute_rhs(Bx, By, Bz);
+
+    //extract_vectors(Bx,By,Bz);
+
+
+    NT dx, dy, dz;
+    if(!solver_.linear_solver(A, Bx, Xx, dx) ||
+       !solver_.linear_solver(A, By, Xy, dy) ||
+       !solver_.linear_solver(A, Bz, Xz, dz) )
+    {
+        std::cerr<<"Could not solve linear system!"<<nl;
+        bool solved = false;
+        CGAL_assertion(solved);
+    }
+
+    //extract_vectors(Xx,Xy,Xz);
+
+    //translate_centroid(Xx, Xy, Xz);
+    //extract_vectors(Xx,Xy,Xz);
+
+    NT surface_area = area(faces(mesh_), mesh_);
+    std::cout << "area= " << surface_area << nl;
+    std::cout << "area sqrt= " << CGAL::sqrt(surface_area) << nl;
+
+
+    //normalize_area(Xx, Xy, Xz);
+    //extract_vectors(Xx, Xy, Xz);
+
+    update_map(Xx, Xy, Xz);
+
+    surface_area = area(faces(mesh_), mesh_);
+    std::cout << "surface_area normalized= " << surface_area << nl;
+
+
+  }
+
+
 private:
 
      // ----------- LINEAR SYSTEM -------- //
@@ -241,22 +241,16 @@ private:
       Eigen_matrix mat(nb_vert_, nb_vert_);
       for(vertex_descriptor vi : vertices(mesh_))
       {
-        //if(!is_border(vi, mesh_))
-        //{
-          NT sum_Lik = 0;
-          for(halfedge_descriptor h : halfedges_around_source(vi, mesh_))
-          {
-            NT Lij = weight_calculator_(h);
+        NT sum_Lik = 0;
+        for(halfedge_descriptor h : halfedges_around_source(vi, mesh_))
+        {
+          NT Lij = weight_calculator_(h);
+          sum_Lik -= Lij;
+          vertex_descriptor vj = target(h, mesh_);
+          mat.coeffRef(vimap_[vi], vimap_[vj]) = Lij;
+        }
 
-            //NT Lij2 = weight_calculator2_(h);
-
-            sum_Lik -= Lij;
-            vertex_descriptor vj = target(h, mesh_);
-            mat.coeffRef(vimap_[vi], vimap_[vj]) = Lij;
-          }
-
-          mat.coeffRef(vimap_[vi], vimap_[vi]) = sum_Lik;
-       //}
+        mat.coeffRef(vimap_[vi], vimap_[vi]) = sum_Lik;
       }
 
       return mat;
@@ -267,19 +261,16 @@ private:
       Eigen_matrix mat(nb_vert_, nb_vert_);
       for(vertex_descriptor vi : vertices(mesh_))
       {
-        //if(!is_border(vi, mesh_))
-        //{
-          NT sum_Dik = 0;
-          for(halfedge_descriptor h : halfedges_around_source(vi, mesh_))
-          {
-            NT Dij = inc_areas_calculator_(h) / 12.0;
-            sum_Dik += Dij;
-            vertex_descriptor vj = target(h, mesh_);
-            mat.coeffRef(vimap_[vi], vimap_[vj]) = Dij;
-          }
+        NT sum_Dik = 0;
+        for(halfedge_descriptor h : halfedges_around_source(vi, mesh_))
+        {
+          NT Dij = inc_areas_calculator_(h) / 12.0;
+          sum_Dik += Dij;
+          vertex_descriptor vj = target(h, mesh_);
+          mat.coeffRef(vimap_[vi], vimap_[vj]) = Dij;
+        }
 
-          mat.coeffRef(vimap_[vi], vimap_[vi]) = sum_Dik;
-        //}
+        mat.coeffRef(vimap_[vi], vimap_[vi]) = sum_Dik;
       }
 
       return mat;
@@ -317,7 +308,6 @@ private:
 
       for(face_descriptor f : faces(mesh_))
       {
-
         for(halfedge_descriptor hi : halfedges_around_face(halfedge(f, mesh_), mesh_))
         {
           vertex_descriptor v_source = source(hi, mesh_);
@@ -333,20 +323,16 @@ private:
           //diagonal
           mat.coeffRef(i_source, i_source) -= cot_val;
           mat.coeffRef(i_target, i_target) -= cot_val;
-
-
         }
       }
 
-      return mat / 2.0;
+      return mat;
     }
 
 
     Eigen_matrix mass_matrix()
     {
       Eigen_matrix mat(nb_vert_, nb_vert_);
-
-
       for(face_descriptor f : faces(mesh_))
       {
 
@@ -362,7 +348,7 @@ private:
 
       //export_eigen_matrix(mat, "data/D");
 
-      mat /= 6.0;
+      mat /= 12.0;
 
       //export_eigen_matrix(mat, "data/D12");
 
@@ -399,8 +385,6 @@ private:
       fill_sparse_matrix(A, Ae);
 
       A.assemble_matrix();
-
-      // assemble matrix ??
 
     }
 
@@ -508,7 +492,7 @@ private:
                 NT val = A.get_coef(i, j);
                 out<<val<<" ";
             }
-            out<<std::endl;
+            out<<nl;
         }
         out.close();
     }
@@ -521,7 +505,7 @@ private:
       std::ofstream out("data/vecs.dat");
       for(int j=0; j < Vx.dimension(); ++j)
       {
-          out<<Vx[j]<<"\t"<<Vy[j]<<"\t"<<Vz[j]<<"\t"<<std::endl;
+          out<<Vx[j]<<"\t"<<Vy[j]<<"\t"<<Vz[j]<<"\t"<<nl;
       }
       out.close();
     }
@@ -537,7 +521,7 @@ private:
               NT val = A.coeff(i, j);
               out<<val<<" ";
           }
-          out<<std::endl;
+          out<<nl;
       }
       out.close();
     }
@@ -615,84 +599,7 @@ private:
 
 
 
-public:
 
-  Shape_smoother(PolygonMesh& mesh, VertexPointMap& vpmap) : mesh_(mesh), vpmap_(vpmap),
-      weight_calculator_(mesh, vpmap),
-      weight_calculator2_(mesh, vpmap), /////// <--
-      inc_areas_calculator_(mesh),
-      nb_vert_(static_cast<int>(vertices(mesh).size()))
-  {  }
-
-  /*void init()
-  {
-    L_ = stiff_matrix();
-  }*/
-
-  Eigen_matrix calc_stiff_matrix()
-  {
-    Eigen_matrix L = stiff_matrix();
-    return L;
-  }
-
-
-  void solve_system(Eigen::SparseMatrix<double>& L)
-  {
-
-    //gather_constrained_vertices();
-
-    Matrix A(nb_vert_, nb_vert_);
-    Vector Bx(nb_vert_);
-    Vector By(nb_vert_);
-    Vector Bz(nb_vert_);
-    Vector Xx(nb_vert_);
-    Vector Xy(nb_vert_);
-    Vector Xz(nb_vert_);
-
-
-    compute_coeff_matrix(A, L);
-
-    //apply_constraints(A);
-
-
-    //extract_matrix(A);
-
-
-    compute_rhs(Bx, By, Bz);
-
-    //extract_vectors(Bx,By,Bz);
-
-
-    NT dx, dy, dz;
-    if(!solver_.linear_solver(A, Bx, Xx, dx) ||
-       !solver_.linear_solver(A, By, Xy, dy) ||
-       !solver_.linear_solver(A, Bz, Xz, dz) )
-    {
-        std::cerr<<"Could not solve linear system!"<<std::endl;
-        bool solved = false;
-        CGAL_assertion(solved);
-    }
-
-    //extract_vectors(Xx,Xy,Xz);
-
-    translate_centroid(Xx, Xy, Xz);
-    //extract_vectors(Xx,Xy,Xz);
-
-    NT surface_area = area(faces(mesh_), mesh_);
-    std::cout << "area= " << surface_area << std::endl;
-    std::cout << "area sqrt= " << CGAL::sqrt(surface_area) << std::endl;
-
-
-    normalize_area(Xx, Xy, Xz);
-    //extract_vectors(Xx, Xy, Xz);
-
-    update_map(Xx, Xy, Xz);
-
-    surface_area = area(faces(mesh_), mesh_);
-    std::cout << "surface_area normalized= " << surface_area << std::endl;
-
-
-  }
 
 
 
@@ -701,9 +608,51 @@ public:
 
 
 
+
+
+
 template<typename PolygonMesh>
-void setup_system(PolygonMesh& mesh, Eigen::SparseMatrix<double>& stiffness_matrix)
+void smooth_shape(PolygonMesh& mesh, int nb_iter)
 {
+
+  // VPmap type
+  typedef typename boost::property_map<PolygonMesh, CGAL::vertex_point_t>::type VertexPointMap;
+  VertexPointMap vpmap = get(CGAL::vertex_point, mesh);
+
+  CGAL::Polygon_mesh_processing::Shape_smoother<PolygonMesh, VertexPointMap> smoother(mesh, vpmap);
+
+  Eigen::SparseMatrix<double> stiffness_matrix;
+  stiffness_matrix = smoother.calc_stiff_matrix();
+
+  for(unsigned int t=0; t<nb_iter; ++t)
+  {
+    smoother.solve_system(stiffness_matrix);
+  }
+
+}
+
+// demo API, undocumented
+template<typename PolygonMesh>
+void solve_mcf_system(PolygonMesh& mesh, int nb_iter, Eigen::SparseMatrix<double>& stiffness_matrix)
+{
+
+  // VPmap type
+  typedef typename boost::property_map<PolygonMesh, CGAL::vertex_point_t>::type VertexPointMap;
+  VertexPointMap vpmap = get(CGAL::vertex_point, mesh);
+
+  CGAL::Polygon_mesh_processing::Shape_smoother<PolygonMesh, VertexPointMap> smoother(mesh, vpmap);
+
+  for(unsigned int t=0; t<nb_iter; ++t)
+  {
+    smoother.solve_system(stiffness_matrix);
+  }
+
+}
+
+template<typename PolygonMesh>
+void setup_mcf_system(PolygonMesh& mesh, int nb_iter, Eigen::SparseMatrix<double>& stiffness_matrix)
+{
+
   // VPmap type
   typedef typename boost::property_map<PolygonMesh, CGAL::vertex_point_t>::type VertexPointMap;
   VertexPointMap vpmap = get(CGAL::vertex_point, mesh);
@@ -713,36 +662,6 @@ void setup_system(PolygonMesh& mesh, Eigen::SparseMatrix<double>& stiffness_matr
   stiffness_matrix = smoother.calc_stiff_matrix();
 
 }
-
-
-
-
-
-template<typename PolygonMesh>
-void smooth_shape(PolygonMesh& mesh, int nb_iter, Eigen::SparseMatrix<double>& stiffness_matrix)
-{
-
-  // VPmap type
-  typedef typename boost::property_map<PolygonMesh, CGAL::vertex_point_t>::type VertexPointMap;
-  VertexPointMap vpmap = get(CGAL::vertex_point, mesh);
-
-  CGAL::Polygon_mesh_processing::Shape_smoother<PolygonMesh, VertexPointMap> smoother(mesh, vpmap);
-
-
-  for(unsigned int t=0; t<nb_iter; ++t)
-  {
-    smoother.solve_system(stiffness_matrix);
-  }
-
-
-
-
-
-}
-
-
-
-
 
 
 
