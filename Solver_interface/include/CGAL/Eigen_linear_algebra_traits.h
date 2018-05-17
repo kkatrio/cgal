@@ -183,13 +183,50 @@ typedef CGAL::Eigen_dense_matrix<double, 3, 3> Matrix3d; // fixed at compile tim
 typedef CGAL::Eigen_dense_vector<double> Vector3d; // fixed at compile time
 
 
-const MatrixXd operator* (const MatrixXd& A,
-                          const Matrix3d& B)
+// matrix multiplication
+template <class NT, int D1, int D2, int D3>
+const CGAL::Eigen_dense_matrix<NT, D1, D3> operator* (const CGAL::Eigen_dense_matrix<NT, D1, D2 >& A,
+                                                      const CGAL::Eigen_dense_matrix<NT, D2, D3 >& B)
 {
-  const MatrixXd product(A.m_matrix * B.m_matrix);
-  return product;
+  return CGAL::Eigen_dense_matrix<NT, D1, D3>(A.m_matrix * B.m_matrix);
 }
 
+// scalar - matrix multiplication
+template <class NT, int D1, int D2>
+const CGAL::Eigen_dense_matrix<NT, D1, D2> operator* (const NT& scalar,
+                                                      const CGAL::Eigen_dense_matrix<NT, D1, D2>& B)
+{
+  return CGAL::Eigen_dense_matrix<NT, D1, D2>(scalar * B.m_matrix);
+}
+
+template <class NT, int D1, int D2>
+const CGAL::Eigen_dense_matrix<NT, D1, D2> operator* (const CGAL::Eigen_dense_matrix<NT, D1, D2>& A,
+                                                      const NT& scalar)
+{
+  return CGAL::Eigen_dense_matrix<NT, D1, D2>(A.m_matrix * scalar);
+}
+
+template <class NT, int D1, int D2>
+const CGAL::Eigen_dense_matrix<NT, D1, D2> operator/ (const CGAL::Eigen_dense_matrix<NT, D1, D2>& A,
+                                                      const double& scalar)
+{
+  return CGAL::Eigen_dense_matrix<NT, D1, D2>(A.m_matrix / scalar);
+}
+
+template <class NT, int D1, int D2>
+const CGAL::Eigen_dense_matrix<NT, D1, D2> operator/ (const double& scalar,
+                                                      const CGAL::Eigen_dense_matrix<NT, D1, D2> & A)
+{
+  return CGAL::Eigen_dense_matrix<NT, D1, D2> (scalar / A.m_matrix);
+}
+
+// addition
+template <class NT, int D1, int D2>
+const CGAL::Eigen_dense_matrix<NT, D1, D2> operator+ (const CGAL::Eigen_dense_matrix<NT, D1, D2> & A,
+                                                      const CGAL::Eigen_dense_matrix<NT, D1, D2> & B)
+{
+  return CGAL::Eigen_dense_matrix<NT, D1, D2> (A.m_matrix + B.m_matrix);
+}
 
 
 // vector - matrix multiplication
