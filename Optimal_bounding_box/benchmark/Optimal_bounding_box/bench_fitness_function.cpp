@@ -34,7 +34,7 @@ int main()
 
   // 2) fill a Matrix with them
   typedef CGAL::Eigen_linear_algebra_traits Linear_algebra_traits;
-  typedef Linear_algebra_traits::MatrixXd MatrixX3d; //matrixXd here.
+  typedef Linear_algebra_traits::MatrixX3d MatrixX3d; //matrixXd here.
   MatrixX3d points_mat(nb_points, 3);
   CGAL::Optimal_bounding_box::sm_to_matrix(mesh, points_mat);
 
