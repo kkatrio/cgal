@@ -32,9 +32,8 @@
 namespace CGAL {
 namespace Optimal_bounding_box {
 
-template <typename Linear_algebra_traits>
-const double compute_fitness(const typename Linear_algebra_traits::Matrix3d& R,
-                                   typename Linear_algebra_traits::MatrixXd& data)
+template <typename Linear_algebra_traits, typename Vertex, typename Matrix>
+const double compute_fitness(const  Vertex& R, const Matrix& data)
 {
   // R: rotation matrix
   CGAL_assertion(R.cols() == 3);
