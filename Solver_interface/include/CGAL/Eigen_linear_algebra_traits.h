@@ -12,7 +12,7 @@
 namespace CGAL {
 
 
-template<typename T>
+template<typename T, int D = Eigen::Dynamic>
 class Eigen_dense_vector;
 
 template<typename T, int D1 = Eigen::Dynamic, int D2 = Eigen::Dynamic>
@@ -21,7 +21,7 @@ class Eigen_dense_matrix
 public:
   typedef Eigen::Matrix<T, D1, D2> EigenType;
   typedef Eigen::Matrix<T, 3, 3> EigenType3;
-  typedef Eigen_dense_vector<T> Eigen_dense_vector_type;
+  typedef Eigen_dense_vector<T, 3> Eigen_dense_vector_type;
 
   Eigen_dense_matrix(std::size_t nrows, std::size_t ncols)
     : m_matrix(static_cast<int>(nrows), static_cast<int>(ncols))
@@ -145,7 +145,7 @@ public:
 };
 
 
-template <typename T> // should it be a template of its size?
+template <typename T, int D>
 class Eigen_dense_vector
 {
 private:
@@ -160,7 +160,7 @@ public:
     m_vector[2] = v2;
   }
 
-  Eigen_dense_vector(EigenType&  vec) : m_vector(vec) {}
+  Eigen_dense_vector(const EigenType&  vec) : m_vector(vec) {}
 
 
   const T& coeff(std::size_t i)
@@ -170,12 +170,14 @@ public:
     return m_vector.coeff(i);
   }
 
+/*
   friend const Eigen_dense_vector operator* (const Eigen_dense_matrix_type& A, Eigen_dense_vector& V)
   {
     EigenType eigen_vec = A.m_matrix * V.m_vector;
     Eigen_dense_vector product_vec(eigen_vec);
     return product_vec;
   }
+  */
 
   mutable EigenType m_vector;
 };
@@ -188,7 +190,7 @@ public:
 
   typedef CGAL::Eigen_dense_matrix<NT> MatrixXd; // dynamic size at run time
   typedef CGAL::Eigen_dense_matrix<NT, 3, 3> Matrix3d; // fixed at compile time
-  typedef CGAL::Eigen_dense_vector<NT> Vector3d; // fixed at compile time
+  typedef CGAL::Eigen_dense_vector<NT, 3> Vector3d; // fixed at compile time
 
 
   /*
@@ -214,6 +216,15 @@ const MatrixXd operator* (const MatrixXd& A,
   return product;
 }
 
+
+
+// vector - matrix multiplication
+template <class NT, int D1, int D2>
+const Eigen_dense_vector<NT, D1> operator* (const CGAL::Eigen_dense_matrix<NT, D1, D2>& A,
+                                            const CGAL::Eigen_dense_vector<NT, D2>& V)
+{
+  return Eigen_dense_vector<NT, D1>(A.m_matrix * V.m_vector);
+}
 
 
 
