@@ -34,6 +34,7 @@
 #include <CGAL/Polyhedron_3.h> // used to get the ch
 #include <CGAL/Simple_cartesian.h>
 #include <CGAL/Exact_predicates_inexact_constructions_kernel.h>
+#include <CGAL/Timer.h>
 
 #if defined(CGAL_EIGEN3_ENABLED)
 #include <CGAL/Eigen_linear_algebra_traits.h>
@@ -216,17 +217,42 @@ void find_obb(std::vector<Point>& points, std::vector<Point>& obb_points, bool u
     fill_matrix(points, points_mat);
   }
 
+  CGAL::Timer timer;
+
+
   std::size_t max_generations = 100;
   Population<Matrix3d> pop(50);
+
+
+  timer.start();
   CGAL::Optimal_bounding_box::Evolution<Linear_algebra_traits>
       search_solution(pop, points_mat);
-  search_solution.evolve(max_generations);
-  Matrix3d rotation = search_solution.get_best();
+  timer.stop();
 
+  std::cout << "constructor: " << timer.time() << std::endl;
+
+  timer.reset();
+  timer.start();
+  search_solution.evolve(max_generations);
+  timer.stop();
+
+  std::cout << "evolve: " << timer.time() << std::endl;
+
+  timer.reset();
+  timer.start();
+  Matrix3d rotation = search_solution.get_best();
+  timer.stop();
+
+  std::cout << "get best: " << timer.time() << std::endl;
   MatrixXd obb; // could be preallocated at compile time
   obb.resize(8, 3);
 
+  timer.reset();
+  timer.start();
   post_processing(points_mat, rotation, obb);
+  timer.stop();
+
+  std::cout << "post porcessing: " << timer.time() << std::endl;
 
   // matrix -> vector
   for(std::size_t i = 0; i < 8; ++i)
