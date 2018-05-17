@@ -164,10 +164,46 @@ class Eigen_linear_algebra_traits
 public:
   typedef double NT;
 
-  typedef CGAL::Eigen_dense_matrix<NT> MatrixXd; // dynamic size at run time
-  typedef CGAL::Eigen_dense_matrix<NT, 3, 3> Matrix3d; // fixed at compile time
-  typedef CGAL::Eigen_dense_vector<NT, 3> Vector3d; // fixed at compile time
+  // dynamic size at run time
+  typedef CGAL::Eigen_dense_matrix<NT> MatrixXd;
 
+  // dynamic rows in run time, fixed cols in compile time
+  typedef CGAL::Eigen_dense_matrix<NT, Eigen::Dynamic, 3> MatrixX3d;
+
+  // fixed at compile time
+  typedef CGAL::Eigen_dense_matrix<NT, 3, 3> Matrix3d;
+
+  // fixed at compile time
+  typedef CGAL::Eigen_dense_vector<NT, 3> Vector3d;
+
+  template <class Matrix>
+  static Matrix transpose(const Matrix& mat)
+  {
+    return Matrix(mat.m_matrix.transpose());
+  }
+
+  template <class Matrix>
+  static NT determinant(const Matrix& mat)
+  {
+    return mat.m_matrix.determinant();
+  }
+
+  template <class NT, int D1, int D2>
+  static CGAL::Eigen_dense_matrix<NT, D1, D2> qr_factorization(const CGAL::Eigen_dense_matrix<NT, D1, D2>& A)
+  {
+    Eigen::HouseholderQR<Eigen::Matrix<NT, D1, D2> > qr(A.m_matrix);
+    return CGAL::Eigen_dense_matrix<NT, D1, D2>(qr.householderQ());
+  }
+
+  template <class Matrix>
+  static void qr_factorization(std::vector<Matrix>& simplex)
+  {
+    for(std::size_t i = 0; i < simplex.size(); ++i)
+    {
+      Matrix mat = simplex[i].m_matrix;
+      simplex[i] = qr_factorization(mat);
+    }
+  }
 
   template <class NT, int D1, int D2>
   static CGAL::Eigen_dense_vector<NT, 3> row(const CGAL::Eigen_dense_matrix<NT, D1, D2>& A,
@@ -177,10 +213,6 @@ public:
   }
 
 };
-
-typedef CGAL::Eigen_dense_matrix<double> MatrixXd; // dynamic size at run time
-typedef CGAL::Eigen_dense_matrix<double, 3, 3> Matrix3d; // fixed at compile time
-typedef CGAL::Eigen_dense_vector<double> Vector3d; // fixed at compile time
 
 
 // matrix multiplication

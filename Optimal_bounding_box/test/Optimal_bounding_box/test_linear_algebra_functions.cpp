@@ -286,7 +286,7 @@ void test_eigen_matrix_interface()
   A.set_coef(2, 0, 0.7);
   A.set_coef(2, 1, 0.8);
   A.set_coef(2, 2, 0.9);
-  CGAL::Eigen_dense_matrix<double, 3, 3> B = A.transpose();
+  CGAL::Eigen_dense_matrix<double, 3, 3> B = CGAL:Eigen_linear_algebra_traits::transpose(A);
 
   CGAL::Eigen_dense_matrix<double, 3, 3> S = 0.5 * A;
 

@@ -25,10 +25,13 @@
 #include <CGAL/assertions.h>
 #include <Eigen/QR>
 #include <vector>
+#include <CGAL/Eigen_linear_algebra_traits.h>
 
 
 namespace CGAL {
 namespace Optimal_bounding_box {
+
+typedef CGAL::Eigen_linear_algebra_traits Linear_algebra_traits;
 
 
 template<typename Matrix>
@@ -57,7 +60,7 @@ const Matrix reflection(const Matrix& S_centroid, const Matrix& S_worst)
   CGAL_assertion(S_worst.cols() == 3);
   CGAL_assertion(S_worst.cols() == 3);
 
-  return S_centroid * S_worst.transpose() * S_centroid;
+  return S_centroid * Linear_algebra_traits::transpose(S_worst) * S_centroid;
 }
 
 template <typename Matrix>
@@ -70,7 +73,7 @@ const Matrix expansion(const Matrix& S_centroid, const Matrix& S_worst, const Ma
   CGAL_assertion(S_reflection.cols() == 3);
   CGAL_assertion(S_reflection.cols() == 3);
 
-  return S_centroid * S_worst.transpose() * S_reflection;
+  return S_centroid * Linear_algebra_traits::transpose(S_worst) * S_reflection;
 }
 
 template <typename Matrix>
@@ -83,12 +86,9 @@ Matrix mean(const Matrix& m1, const Matrix& m2)
   CGAL_assertion(m2.cols() == 3);
 
   Matrix reduction = 0.5 * m1 + 0.5 * m2;
-  Matrix Q;
-  //qr_factorization(contract, Q);
+  Matrix Q = Linear_algebra_traits::qr_factorization(reduction);
 
-  reduction.qr_factorization(Q);
-
-  double det = Q.determinant();
+  double det =Linear_algebra_traits::determinant(Q);
   return Q / det;
 }
 
@@ -96,13 +96,9 @@ template <typename Matrix>
 const Matrix centroid(Matrix& S1, Matrix& S2, Matrix& S3) // const?
 {
   Matrix mean = (S1 + S2 + S3) / 3.0;
-  Matrix Q;
-  //qr_factorization(mean, Q);
+  Matrix Q = Linear_algebra_traits::qr_factorization(mean);
 
-  mean.qr_factorization(Q);
-
-
-  double det = Q.determinant();
+  double det =Linear_algebra_traits::determinant(Q);
   return Q / det;
 }
 

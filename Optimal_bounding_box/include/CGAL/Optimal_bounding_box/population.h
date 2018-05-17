@@ -26,7 +26,7 @@
 #include <CGAL/Random.h>
 #include <CGAL/Optimal_bounding_box/fitness_function.h>
 #include <CGAL/Optimal_bounding_box/linear_algebra.h>
-
+#include <CGAL/Eigen_linear_algebra_traits.h>
 
 namespace CGAL {
 namespace Optimal_bounding_box {
@@ -102,9 +102,8 @@ private:
         R.resize(3, 3);
 
       create_vertex(R);
-      Matrix Q; // no allocation
-      //qr_factorization(R, Q);
-      R.qr_factorization(Q);
+      Matrix Q = CGAL::Eigen_linear_algebra_traits::qr_factorization(R);
+
       simplex[i] = Q;
     }
     CGAL_assertion(simplex.size() == 4);

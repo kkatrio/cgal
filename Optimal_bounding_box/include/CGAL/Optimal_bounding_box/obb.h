@@ -86,7 +86,7 @@ void evolution(Vertex& R, Matrix& points, std::size_t max_generations) // todo: 
     // debugging
     Fitness_map<Matrix> fitness_map(pop, points);
     Matrix R_now = fitness_map.get_best();
-    std::cout << "det= " << R_now.determinant() << std::endl;
+    std::cout << "det= " << CGAL::Eigen_linear_algebra_traits.determinant(R_now) << std::endl;
 #endif
 
     // stopping criteria
@@ -119,7 +119,7 @@ void post_processing(const Matrix_dynamic& points, Vertex& R, Matrix_fixed& obb)
 
   // 1) rotate points with R
   Matrix_dynamic rotated_points(points.rows(), points.cols());
-  rotated_points = points * R.transpose();
+  rotated_points = points * CGAL::Eigen_linear_algebra_traits::transpose(R);
 
   // 2) get AABB from rotated points
   typedef CGAL::Simple_cartesian<double> K;
