@@ -73,10 +73,9 @@ const double compute_fitness(const  Vertex& R, const Matrix& data)
   return ((xmax - xmin) * (ymax - ymin) * (zmax - zmin));
 }
 
-template <typename Vertex, typename Matrix>
+template <typename Linear_algebra_traits, typename Vertex, typename Matrix>
 struct Fitness_map
 {
-  typedef CGAL::Eigen_linear_algebra_traits Linear_algebra_traits; // to be added as a parameter
 
   Fitness_map(Population<Vertex>& p, Matrix& points) : pop(p), points(points)
   {}
@@ -103,14 +102,14 @@ struct Fitness_map
     return pop[simplex_id][vertex_id];
   }
 
-  const double get_best_fitness_value(Matrix& data)
+  const double get_best_fitness_value()
   {
     const Vertex best_mat = get_best();
-    return compute_fitness<Linear_algebra_traits>(best_mat, data);
+    return compute_fitness<Linear_algebra_traits>(best_mat, points);
   }
 
-  Matrix& points;
   Population<Vertex>& pop;
+  const Matrix& points;
 };
 
 }} // end namespaces

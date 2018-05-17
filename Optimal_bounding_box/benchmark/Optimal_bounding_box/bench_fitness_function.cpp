@@ -48,8 +48,8 @@ int main()
   timer.start();
 
   // 4) compute fitness of population via the Fitness map
-  CGAL::Optimal_bounding_box::Fitness_map<Matrix3d, MatrixX3d> fit_map(pop, points_mat); // changed here.
-  double result = fit_map.get_best_fitness_value(points_mat); // changed here.
+  CGAL::Optimal_bounding_box::Fitness_map<Linear_algebra_traits, Matrix3d, MatrixX3d> fit_map(pop, points_mat); // changed here.
+  double result = fit_map.get_best_fitness_value(); // changed here.
 
   timer.stop();
 
