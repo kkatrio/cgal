@@ -64,13 +64,6 @@ public:
 
   void resize(int i_, int j_) { m_matrix.resize(i_, j_);}
 
-  Eigen_dense_vector_type row(int i_)
-  {
-    Eigen::Vector3d row = m_matrix.row(i_);
-    Eigen_dense_vector_type row_vector(row);
-    return row_vector;
-  }
-
   const T& coeff(int i_) const
   {
     return m_matrix.coeff(i_);
@@ -149,19 +142,11 @@ template <typename T, int D>
 class Eigen_dense_vector
 {
 private:
-  typedef Eigen::Vector3d EigenType;
-  typedef Eigen_dense_matrix<T, 3, 3> Eigen_dense_matrix_type;
+  typedef Eigen::Matrix<T, D, 1> EigenType;
 
 public:
-  Eigen_dense_vector(T& v0, T& v1, T& v2)
-  {
-    m_vector[0] = v0;
-    m_vector[1] = v1;
-    m_vector[2] = v2;
-  }
 
   Eigen_dense_vector(const EigenType&  vec) : m_vector(vec) {}
-
 
   const T& coeff(std::size_t i)
   {
@@ -169,15 +154,6 @@ public:
     CGAL_assertion(i < 3);
     return m_vector.coeff(i);
   }
-
-/*
-  friend const Eigen_dense_vector operator* (const Eigen_dense_matrix_type& A, Eigen_dense_vector& V)
-  {
-    EigenType eigen_vec = A.m_matrix * V.m_vector;
-    Eigen_dense_vector product_vec(eigen_vec);
-    return product_vec;
-  }
-  */
 
   mutable EigenType m_vector;
 };
@@ -193,14 +169,12 @@ public:
   typedef CGAL::Eigen_dense_vector<NT, 3> Vector3d; // fixed at compile time
 
 
-  /*
-  friend inline const MatrixXd operator* (const MatrixXd& A,
-                                  const Matrix3d& B)
+  template <class NT, int D1, int D2>
+  static CGAL::Eigen_dense_vector<NT, 3> row(const CGAL::Eigen_dense_matrix<NT, D1, D2>& A,
+                                              int i)
   {
-    const MatrixXd product(A.m_matrix * B.m_matrix);
-    return product;
+    return CGAL::Eigen_dense_vector<NT, 3>(A.m_matrix.row(i));
   }
-  */
 
 };
 

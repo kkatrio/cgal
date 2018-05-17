@@ -48,7 +48,8 @@ const double compute_fitness(const typename Linear_algebra_traits::Matrix3d& R,
   double xmin, xmax, ymin, ymax, zmin, zmax;
   for(int i = 0; i < data.rows(); i++){
 
-    Vector3d vec = data.row(i);
+    //Vector3d vec = data.row(i);
+    Vector3d vec = Linear_algebra_traits::row(data, i);
     vec = R * vec;
 
     if(i == 0){
