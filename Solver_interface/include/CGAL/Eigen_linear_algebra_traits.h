@@ -20,8 +20,6 @@ class Eigen_dense_matrix
 {
 public:
   typedef Eigen::Matrix<T, D1, D2> EigenType;
-  typedef Eigen::Matrix<T, 3, 3> EigenType3;
-  typedef Eigen_dense_vector<T, 3> Eigen_dense_vector_type;
 
   Eigen_dense_matrix(std::size_t nrows, std::size_t ncols)
     : m_matrix(static_cast<int>(nrows), static_cast<int>(ncols))
@@ -80,7 +78,6 @@ private:
   typedef Eigen::Matrix<T, D, 1> EigenType;
 
 public:
-
   Eigen_dense_vector(const EigenType&  vec) : m_vector(vec) {}
 
   const T& coeff(std::size_t i)
@@ -146,7 +143,6 @@ public:
   {
     return CGAL::Eigen_dense_vector<NT, 3>(A.m_matrix.row(i));
   }
-
 };
 
 
@@ -194,7 +190,6 @@ const CGAL::Eigen_dense_matrix<NT, D1, D2> operator+ (const CGAL::Eigen_dense_ma
 {
   return CGAL::Eigen_dense_matrix<NT, D1, D2> (A.m_matrix + B.m_matrix);
 }
-
 
 // vector - matrix multiplication
 template <class NT, int D1, int D2>
