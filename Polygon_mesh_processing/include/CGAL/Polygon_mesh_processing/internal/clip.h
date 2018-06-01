@@ -209,6 +209,59 @@ clip(      TriangleMesh& tm,
       get_param(np_tm, internal_np::edge_is_constrained), np_tm, np_c);
 }
 
+template <class Point_3, class TriangleMesh>
+void construct_triangle_mesh(const std::vector<Point_3>& points, TriangleMesh& tm,
+                             cpp11::array<CGAL::Oriented_side,8>& orientations)
+{
+
+  cpp11::array<int, 8> edge_indices = {{ 0,1, 1,2, 2,3, 3,0 }};
+
+  std::vector<std::vector<int>> faces;
+  faces.push_back({{ 0,1,2,3 }});
+  faces.push_back({{ 4,5,6,7 }});
+  faces.push_back({{ 0,1,5,4 }});
+  faces.push_back({{ 1,2,6,5 }});
+  faces.push_back({{ 2,3,7,6 }});
+  faces.push_back({{ 3,0,4,7 }});
+
+  // collect intact faces
+  std::vector<std::vector<int>> faces_intact;
+  for(int k = 0 ; k < 6; ++k)
+  {
+    bool is_on_negative_side = true;
+    is_on_negative_side &= orientations[faces[k][0]] == ON_NEGATIVE_SIDE;
+    is_on_negative_side &= orientations[faces[k][1]] == ON_NEGATIVE_SIDE;
+    is_on_negative_side &= orientations[faces[k][2]] == ON_NEGATIVE_SIDE;
+    is_on_negative_side &= orientations[faces[k][3]] == ON_NEGATIVE_SIDE;
+
+    if(is_on_negative_side)
+      faces_intact.push_back(faces[k]);
+  }
+  std::cout << "faces_intact = " << faces_intact.size() << std::endl;
+
+
+  // collect cut faces
+  std::vector<std::vector<int>> faces_cut;
+  for(int k = 0 ; k < 6; ++k)
+  {
+    for(int j = 0; j < 4; ++j)
+    {
+      int s = faces[k][edge_indices[2*j]];
+      int t = faces[k][edge_indices[2*j + 1]];
+      if(orientations[s] != orientations[t])
+      {
+        faces_cut.push_back(faces[k]);
+        break;
+      }
+    }
+  }
+  std::cout << "faces_cut = " << faces_cut.size() << std::endl;
+
+
+}
+
+
+
 /// \todo document me
 template <class Plane_3,
           class TriangleMesh,
@@ -302,10 +355,29 @@ clip_to_bbox(const Plane_3& plane,
   // take the convex hull of the points on the negative side+intersection points
   // overkill...
   Polyhedron_3<Geom_traits> P;
-  CGAL::convex_hull_3(points.begin(), points.end(), P);
+
+
+  //CGAL::convex_hull_3(points.begin(), points.end(), P);
+
+  construct_triangle_mesh(points, P, orientations);
+
+
+  for(auto pit = P.points_begin(); pit != P.points_end(); ++pit)
+  {
+    std::cout << (*pit).x() << " " << (*pit).y() << " " << (*pit).z() << "\n";
+  }
+
+
   copy_face_graph(P, tm_out,
                   Emptyset_iterator(), Emptyset_iterator(), Emptyset_iterator(),
                   get(vertex_point, P), vpm_out);
+
+  for(auto v : vertices(tm_out))
+  {
+    std::cout << v << "\n" ;
+  }
+
+
   return ON_ORIENTED_BOUNDARY;
 }
 
