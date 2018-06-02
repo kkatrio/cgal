@@ -211,7 +211,8 @@ clip(      TriangleMesh& tm,
 
 template <class Point_3, class TriangleMesh>
 void construct_triangle_mesh(const std::vector<Point_3>& points, TriangleMesh& tm,
-                             cpp11::array<CGAL::Oriented_side,8>& orientations)
+                             cpp11::array<CGAL::Oriented_side,8>& orientations,
+                             std::map<int, int>& fragments)
 {
 
   cpp11::array<int, 8> edge_indices = {{ 0,1, 1,2, 2,3, 3,0 }};
@@ -225,7 +226,7 @@ void construct_triangle_mesh(const std::vector<Point_3>& points, TriangleMesh& t
   faces.push_back({{ 3,0,4,7 }});
 
   // collect intact faces
-  std::vector<std::vector<int>> faces_intact;
+  std::vector<std::vector<int>> pfaces;
   for(int k = 0 ; k < 6; ++k)
   {
     bool is_on_negative_side = true;
@@ -235,9 +236,9 @@ void construct_triangle_mesh(const std::vector<Point_3>& points, TriangleMesh& t
     is_on_negative_side &= orientations[faces[k][3]] == ON_NEGATIVE_SIDE;
 
     if(is_on_negative_side)
-      faces_intact.push_back(faces[k]);
+      pfaces.push_back(faces[k]);
   }
-  std::cout << "faces_intact = " << faces_intact.size() << std::endl;
+  std::cout << "faces_intact = " << pfaces.size() << std::endl;
 
 
   // collect cut faces
@@ -257,7 +258,47 @@ void construct_triangle_mesh(const std::vector<Point_3>& points, TriangleMesh& t
   }
   std::cout << "faces_cut = " << faces_cut.size() << std::endl;
 
+  
+  std::cout << "fragments:\n";
+  for(auto i = fragments.begin(); i != fragments.end(); ++i)
+  {
+    std::cout << i->first << " " << i->second << "\n";
+  }
 
+
+  // repair cut faces
+  for(std::vector<int>& f : faces_cut)
+  {
+    for(std::size_t i = 0; i < f.size(); ++i)
+    {
+      // remove bad vertices
+      int vertex_id = f[i];
+      std::cout << "vertex_id = " << vertex_id << "\n";
+      if(orientations[vertex_id] == ON_POSITIVE_SIDE)
+      {
+        assert(fragments.find(vertex_id) != fragments.end());
+        // replace with the intersection vertex
+        std::cout << "fragments[vertex_id]= " << fragments[vertex_id] << "\n";
+        f[i] = fragments[vertex_id];
+      }
+      
+    }
+  }
+  
+  // has all faces of the new mesh
+  pfaces.insert(pfaces.end(), faces_cut.begin(), faces_cut.end());
+  
+  
+  
+  for(auto f : pfaces)
+  {
+    for(int i : f)
+    {
+      std::cout << i << " ";
+    }
+    std::cout << std::endl;
+  }
+  
 }
 
 
@@ -281,6 +322,8 @@ clip_to_bbox(const Plane_3& plane,
   Vpm vpm_out = boost::choose_param(get_param(np, internal_np::vertex_point),
                                     get_property_map(boost::vertex_point, tm_out));
 
+  typedef boost::graph_traits<TriangleMesh> GT;
+  typedef typename GT::vertex_descriptor vertex_descriptor;
 
   cpp11::array<Point_3,8> corners= {{
     Point_3(bbox.xmin(),bbox.ymin(),bbox.zmin()),
@@ -312,6 +355,10 @@ clip_to_bbox(const Plane_3& plane,
     4,5, 5,6, 6,7, 7,4, // top face edges
     0,4, 1,5, 2,6, 3,7
   }};
+  
+  std::map<int, int> fragments; // <good vertex, intersection>
+
+  int id = 8; // id of new intersetion vertices
 
   for (int i=0; i<12; ++i)
   {
@@ -319,12 +366,35 @@ clip_to_bbox(const Plane_3& plane,
     if (orientations[i1]==ON_ORIENTED_BOUNDARY) continue;
     if (orientations[i2]==ON_ORIENTED_BOUNDARY) continue;
     if (orientations[i1]!=orientations[i2])
+    {
       points.push_back(
         boost::get<Point_3>(
           *intersection(plane, Segment_3(corners[i1], corners[i2]) )
         )
       );
+      
+      // save the good and the new`
+      int bad_vertex = orientations[i1] == ON_POSITIVE_SIDE ? i1 : i2;
+       
+      // fragmented edges indices
+      fragments[bad_vertex] = id++; // not enough: maybe 
+
+      // update the vpm with the intersection points
+      vertex_descriptor v = add_vertex(tm_out);
+      Point_3 p = boost::get<Point_3>(
+          *intersection(plane, Segment_3(corners[i1], corners[i2]) ) );
+      put(vpm_out, v, p);
+    }
   }
+  
+  
+  std::cout << "fragments:\n";
+  for(auto i = fragments.begin(); i != fragments.end(); ++i)
+  {
+    std::cout << i->first << " " << i->second << "\n";
+  }
+
+	
 
 
   Oriented_side last_os = ON_ORIENTED_BOUNDARY;
@@ -359,7 +429,7 @@ clip_to_bbox(const Plane_3& plane,
 
   //CGAL::convex_hull_3(points.begin(), points.end(), P);
 
-  construct_triangle_mesh(points, P, orientations);
+  construct_triangle_mesh(points, P, orientations, fragments);
 
 
   for(auto pit = P.points_begin(); pit != P.points_end(); ++pit)
