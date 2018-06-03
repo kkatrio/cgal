@@ -34,12 +34,6 @@ int main()
 
   PMP::clip_to_bbox(plane, bbox, tm_out, params::all_default());
 
-  for(auto v : vertices(tm_out))
-  {
-    std::cout << v << "\n" ;
-  }
-
-
   std::ofstream output("data-coref/clipped_result.off");
   output << tm_out;
   output.close();
