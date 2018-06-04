@@ -280,8 +280,21 @@ void construct_triangle_mesh(std::map<int, Point_3>& pid_map, TriangleMesh& tm,
     }
   }
   
+
+  // get new face created by intersecting plane
+  int start_face_id = 8;
+  std::vector<int> new_face;
+  for(auto i = pid_map.begin(); i != pid_map.end(); ++i)
+  {
+    int id = i->first;
+    if(id >= start_face_id)
+      new_face.push_back(id);
+  }
+
+
   // has all faces of the new mesh
-  pfaces.insert(pfaces.end(), faces_cut.begin(), faces_cut.end());  
+  pfaces.insert(pfaces.end(), faces_cut.begin(), faces_cut.end());
+  pfaces.push_back(new_face);
   
   for(auto f : pfaces)
   {
@@ -310,6 +323,8 @@ void construct_triangle_mesh(std::map<int, Point_3>& pid_map, TriangleMesh& tm,
   }
 
 
+  std::map<int, vertex_descriptor> pid_vertex_map_added;
+
   // connect in pmesh
   for(auto pf : pfaces)
   {
@@ -321,41 +336,83 @@ void construct_triangle_mesh(std::map<int, Point_3>& pid_map, TriangleMesh& tm,
     // for every vertex - id  on the face
     for(int id : pf)
     {
-      // add vertex to tm and point to vpm
-      vertex_descriptor v = add_vertex(tm);
-      Point_3 p = pid_map[id];
-      put(vpm, v, p);
 
-      // add halfedge and set its target
-      halfedge_descriptor h = halfedge(add_edge(tm), tm);
-      set_target(h, v, tm);
-      hedges.push_back(h); // for last set_halfedge
+      vertex_descriptor v;
+      halfedge_descriptor h;
+
+      // if it is new
+      if(pid_vertex_map_added.find(id) == pid_vertex_map_added.end())
+      {
+        // add vertex to tm and point to vpm
+        //vertex_descriptor v = add_vertex(tm);
+        v = add_vertex(tm);
+        Point_3 p = pid_map[id];
+        put(vpm, v, p);
+
+        // add halfedge and set its target
+        //halfedge_descriptor h = halfedge(add_edge(tm), tm);
+        h = halfedge(add_edge(tm), tm);
+        set_target(h, v, tm);
+
+        hedges.push_back(h); // for last set_halfedge
+        pid_vertex_map_added.insert(std::make_pair(id, v));
+      }
+      else
+      {
+        // create a new halfedge
+        h = halfedge(add_edge(tm), tm);
+
+        // set it to be opposite of the existing
+        v = pid_vertex_map_added[id];
+        halfedge_descriptor hprev = halfedge(v, tm);
+        halfedge_descriptor hopp = next(hprev, tm);
+        h == opposite(hopp, tm);
+        set_target(h, v, tm);
+
+        hedges.push_back(h); // for last set_halfedge
+      }
 
       // set face and halfedge
       set_face(h, f, tm);
-      set_halfedge(v, h, tm); // needed ?
-    }
+      set_halfedge(v, h, tm);
+
+    } // end for each face
+
+    CGAL_assertion(hedges.size() == 4); // or 5 generally
 
     set_halfedge(f, hedges[0], tm);
 
 
-    // connect halfedges
+    // connect halfedges - for each face
     hedges.push_back(hedges.front());
     for(std::size_t i = 0; i < hedges.size() - 1; ++i)
     {
       set_next(hedges[i], hedges[i + 1], tm);
     }
-  }
+
+
+  } // end pfaces
   std::cout << "connecting done.\n";
+
 
 
   std::cout << "#vertices= " << vertices(tm).size() << std::endl;
   std::cout << "#faces= " << faces(tm).size() << std::endl;
 
 
+  std::cout << std::endl;
+  for(face_descriptor f : faces(tm))
+  {
+    for(vertex_descriptor v :  vertices_around_face(halfedge(f, tm), tm))
+    {
+      std::cout << v << " ";
+    }
+    std::cout << std::endl;
+  }
 
 
-  std::cin.get();
+
+  //std::cin.get();
 
 
   
@@ -454,35 +511,9 @@ clip_to_bbox(const Plane_3& plane,
       int good_vertex = orientations[i1] == ON_NEGATIVE_SIDE ? i1 : i2;
       pid_map[good_vertex] = corners[good_vertex];
 
-
-      /*
-
-      // update the vpm_out & tm_out with the intersection points
-      vertex_descriptor v = add_vertex(tm_out);
-      Point_3 p = boost::get<Point_3>(
-          *intersection(plane, Segment_3(corners[i1], corners[i2]) ) );
-      put(vpm_out, v, p);
-
-      // put in vpm the coors of the good corners as well.
-      int good_vertex = orientations[i1] == ON_NEGATIVE_SIDE ? i1 : i2;
-      vertex_descriptor vg = add_vertex(tm_out);
-      Point_3 pg = corners[good_vertex];
-      std::cout << pg.x() << " " << pg.y() << " " << pg.z() << std::endl;
-      put(vpm_out, vg, pg);
-
-      */
-
     }
   }
 
-
-  /*
-  std::cout << "fragments:\n";
-  for(auto i = fragments.begin(); i != fragments.end(); ++i)
-  {
-    std::cout << i->first << " " << i->second << "\n";
-  }
-  */
 
   Oriented_side last_os = ON_ORIENTED_BOUNDARY;
   for (int i=0; i<8; ++i)
@@ -517,26 +548,6 @@ clip_to_bbox(const Plane_3& plane,
 
 
   construct_triangle_mesh(pid_map, tm_out, orientations, fragments);
-
-
-
-  //face_descriptor f = Euler::add_face(vertices_out, tm_out);
-
-  /*
-  std::cout << "tm_out: \n";
-  std::cout << "vertices.size()= " << vertices(tm_out).size() << std::endl;
-  for(auto v : vertices(tm_out))
-  {
-    Point_3 p = get(vpm_out, v);
-    std::cout << p.x() << " " << p.y() << " " << p.z() << std::endl;
-  }
-  */
-
-  //triangulate_face(f, tm_out);
-
-
-
-
 
   /*
   copy_face_graph(P, tm_out,
