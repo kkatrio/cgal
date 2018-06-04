@@ -212,7 +212,7 @@ clip(      TriangleMesh& tm,
 }
 
 template <class Point_3, class TriangleMesh>
-void construct_triangle_mesh(const std::vector<Point_3>& points, TriangleMesh& tm,
+void construct_triangle_mesh(std::map<int, Point_3>& pid_map, TriangleMesh& tm,
                              cpp11::array<CGAL::Oriented_side,8>& orientations,
                              std::map<int, int>& fragments)
 {
@@ -294,22 +294,73 @@ void construct_triangle_mesh(const std::vector<Point_3>& points, TriangleMesh& t
   
   typedef boost::graph_traits<TriangleMesh> GT;
   typedef typename GT::vertex_descriptor vertex_descriptor;
+  typedef typename GT::face_descriptor face_descriptor;
+  typedef typename GT::halfedge_descriptor halfedge_descriptor;
   
   std::cout << "#faces before= " << faces(tm).size() << std::endl;
 
-  for(auto f : pfaces)
+  typedef typename boost::property_map<TriangleMesh, boost::vertex_point_t>::const_type Vpm;
+  Vpm vpm = get(boost::vertex_point, tm);
+
+
+
+  for(auto it = pid_map.begin(); it != pid_map.end(); ++it)
+  {
+    std::cout << it->first << " " << it->second << std::endl;
+  }
+
+
+  // connect in pmesh
+  for(auto pf : pfaces)
   {
 
-    //Euler::add_face(f, tm);
-    // must get h
-    set_face(h, f, tm);
+    std::vector<halfedge_descriptor> hedges;
+
+    face_descriptor f = add_face(tm);
+
+    // for every vertex - id  on the face
+    for(int id : pf)
+    {
+      // add vertex to tm and point to vpm
+      vertex_descriptor v = add_vertex(tm);
+      Point_3 p = pid_map[id];
+      put(vpm, v, p);
+
+      // add halfedge and set its target
+      halfedge_descriptor h = halfedge(add_edge(tm), tm);
+      set_target(h, v, tm);
+      hedges.push_back(h); // for last set_halfedge
+
+      // set face and halfedge
+      set_face(h, f, tm);
+      set_halfedge(v, h, tm); // needed ?
+    }
+
+    set_halfedge(f, hedges[0], tm);
+
+
+    // connect halfedges
+    hedges.push_back(hedges.front());
+    for(std::size_t i = 0; i < hedges.size() - 1; ++i)
+    {
+      set_next(hedges[i], hedges[i + 1], tm);
+    }
   }
-  
-  
+  std::cout << "connecting done.\n";
+
+
+  std::cout << "#vertices= " << vertices(tm).size() << std::endl;
+  std::cout << "#faces= " << faces(tm).size() << std::endl;
+
+
+
+
+  std::cin.get();
+
+
   
   triangulate_faces(faces(tm), tm);
   std::cout << "#faces after= " << faces(tm).size() << std::endl;
-  
   
   
   
@@ -339,6 +390,7 @@ clip_to_bbox(const Plane_3& plane,
   typedef boost::graph_traits<TriangleMesh> GT;
   typedef typename GT::vertex_descriptor vertex_descriptor;
   typedef typename GT::face_descriptor face_descriptor;
+  typedef typename GT::halfedge_descriptor halfedge_descriptor;
 
   cpp11::array<Point_3,8> corners= {{
     Point_3(bbox.xmin(),bbox.ymin(),bbox.zmin()),
@@ -372,9 +424,8 @@ clip_to_bbox(const Plane_3& plane,
   }};
   
   std::map<int, int> fragments; // <good vertex, intersection>
-
-  //std::vector<vertex_descriptor> vertices_out;
-  std::set<vertex_descriptor> vertices_out;
+  std::vector<int> pids;
+  std::map<int, Point_3> pid_map;
 
   int id = 8; // id of new intersetion vertices
 
@@ -390,18 +441,24 @@ clip_to_bbox(const Plane_3& plane,
           *intersection(plane, Segment_3(corners[i1], corners[i2]) )
         )
       );
-      
 
-      // save the good and the new
+      pid_map[id] = points.back(); // todo: avoid points vec
+
       int bad_vertex = orientations[i1] == ON_POSITIVE_SIDE ? i1 : i2;
-       
       // fragmented edges indices
-      fragments[bad_vertex] = id++; // not enough: 0,1 and 0,4
+      fragments[bad_vertex] = id; // not enough: 0,1 and 0,4
+
+      id++;
+
+
+      int good_vertex = orientations[i1] == ON_NEGATIVE_SIDE ? i1 : i2;
+      pid_map[good_vertex] = corners[good_vertex];
+
+
+      /*
 
       // update the vpm_out & tm_out with the intersection points
       vertex_descriptor v = add_vertex(tm_out);
-      //vertices_out.push_back(v);
-      vertices_out.insert(v);
       Point_3 p = boost::get<Point_3>(
           *intersection(plane, Segment_3(corners[i1], corners[i2]) ) );
       put(vpm_out, v, p);
@@ -409,11 +466,12 @@ clip_to_bbox(const Plane_3& plane,
       // put in vpm the coors of the good corners as well.
       int good_vertex = orientations[i1] == ON_NEGATIVE_SIDE ? i1 : i2;
       vertex_descriptor vg = add_vertex(tm_out);
-      //vertices_out.push_back(vg);
-      vertices_out.insert(v);
       Point_3 pg = corners[good_vertex];
       std::cout << pg.x() << " " << pg.y() << " " << pg.z() << std::endl;
       put(vpm_out, vg, pg);
+
+      */
+
     }
   }
 
@@ -456,18 +514,9 @@ clip_to_bbox(const Plane_3& plane,
   //Polyhedron_3<Geom_traits> P;
   //CGAL::convex_hull_3(points.begin(), points.end(), P);
 
-  /*
-  std::cout << "tm_out: \n";
-  std::cout << "vertices.size()= " << vertices(tm_out).size() << std::endl;
-  for(auto v : vertices(tm_out))
-  {
-    Point_3 p = get(vpm_out, v);
-    std::cout << p.x() << " " << p.y() << " " << p.z() << std::endl;
-  }
-  */
 
 
-  construct_triangle_mesh(points, tm_out, orientations, fragments);
+  construct_triangle_mesh(pid_map, tm_out, orientations, fragments);
 
 
 
