@@ -294,7 +294,7 @@ void construct_triangle_mesh(std::map<int, Point_3>& pid_map, TriangleMesh& tm,
 
   // has all faces of the new mesh
   pfaces.insert(pfaces.end(), faces_cut.begin(), faces_cut.end());
-  pfaces.push_back(new_face);
+ // pfaces.push_back(new_face);
   
   for(auto f : pfaces)
   {
@@ -344,17 +344,13 @@ void construct_triangle_mesh(std::map<int, Point_3>& pid_map, TriangleMesh& tm,
       if(pid_vertex_map_added.find(id) == pid_vertex_map_added.end())
       {
         // add vertex to tm and point to vpm
-        //vertex_descriptor v = add_vertex(tm);
         v = add_vertex(tm);
         Point_3 p = pid_map[id];
         put(vpm, v, p);
 
-        // add halfedge and set its target
-        //halfedge_descriptor h = halfedge(add_edge(tm), tm);
+        // add halfedge
         h = halfedge(add_edge(tm), tm);
-        set_target(h, v, tm);
 
-        hedges.push_back(h); // for last set_halfedge
         pid_vertex_map_added.insert(std::make_pair(id, v));
       }
       else
@@ -362,19 +358,21 @@ void construct_triangle_mesh(std::map<int, Point_3>& pid_map, TriangleMesh& tm,
         // create a new halfedge
         h = halfedge(add_edge(tm), tm);
 
-        // set it to be opposite of the existing
+        // use existing vertex
         v = pid_vertex_map_added[id];
-        halfedge_descriptor hprev = halfedge(v, tm);
+        halfedge_descriptor hprev = halfedge(v, tm); // because v here is the target
         halfedge_descriptor hopp = next(hprev, tm);
         h == opposite(hopp, tm);
-        set_target(h, v, tm);
 
-        hedges.push_back(h); // for last set_halfedge
       }
 
-      // set face and halfedge
+      // set target face and halfedge
+      set_target(h, v, tm);
       set_face(h, f, tm);
       set_halfedge(v, h, tm);
+
+
+      hedges.push_back(h);
 
     } // end for each face
 
@@ -390,14 +388,23 @@ void construct_triangle_mesh(std::map<int, Point_3>& pid_map, TriangleMesh& tm,
       set_next(hedges[i], hedges[i + 1], tm);
     }
 
-
   } // end pfaces
   std::cout << "connecting done.\n";
+
+
+  for(face_descriptor f : faces(tm))
+  {
+    for(halfedge_descriptor h  : halfedges_around_face(halfedge(f, tm), tm) )
+    {
+      std::cout << "source= " << source(h, tm) << " target= " << target(h, tm) << std::endl;
+    }
+  }
 
 
 
   std::cout << "#vertices= " << vertices(tm).size() << std::endl;
   std::cout << "#faces= " << faces(tm).size() << std::endl;
+
 
 
   std::cout << std::endl;
@@ -411,8 +418,23 @@ void construct_triangle_mesh(std::map<int, Point_3>& pid_map, TriangleMesh& tm,
   }
 
 
+  std::cout << std::endl;
+  for(face_descriptor f : faces(tm))
+  {
+    for(vertex_descriptor v :  vertices_around_face(halfedge(f, tm), tm))
+    {
+      std::cout << get(vpm, v) << " ";
+    }
+    std::cout << std::endl;
+  }
 
   //std::cin.get();
+
+
+
+  std::ofstream out("/tmp/pmesh.off");
+  out << tm;
+  out.close();
 
 
   
@@ -480,7 +502,7 @@ clip_to_bbox(const Plane_3& plane,
     0,4, 1,5, 2,6, 3,7
   }};
   
-  std::map<int, int> fragments; // <good vertex, intersection>
+  std::map<int, int> fragments; // <bad vertex, intersection>
   std::vector<int> pids;
   std::map<int, Point_3> pid_map;
 
@@ -499,18 +521,14 @@ clip_to_bbox(const Plane_3& plane,
         )
       );
 
-      pid_map[id] = points.back(); // todo: avoid points vec
-
+      pid_map[id] = points.back(); // todo: avoid points vector, not needed
       int bad_vertex = orientations[i1] == ON_POSITIVE_SIDE ? i1 : i2;
       // fragmented edges indices
       fragments[bad_vertex] = id; // not enough: 0,1 and 0,4
-
       id++;
-
 
       int good_vertex = orientations[i1] == ON_NEGATIVE_SIDE ? i1 : i2;
       pid_map[good_vertex] = corners[good_vertex];
-
     }
   }
 
